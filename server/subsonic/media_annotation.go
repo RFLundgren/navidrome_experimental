@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	. "github.com/Masterminds/squirrel"
 	"github.com/navidrome/navidrome/core/scrobbler"
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
@@ -14,6 +15,7 @@ import (
 	"github.com/navidrome/navidrome/server/events"
 	"github.com/navidrome/navidrome/server/subsonic/responses"
 	"github.com/navidrome/navidrome/utils/req"
+	"github.com/navidrome/navidrome/utils/slice"
 )
 
 func (api *Router) SetRating(r *http.Request) (*responses.Subsonic, error) {
@@ -263,6 +265,54 @@ func (api *Router) GetUserTags(r *http.Request) (*responses.Subsonic, error) {
 
 	res := newResponse()
 	res.UserTags = &responses.UserTags{Tag: tags}
+	return res, nil
+}
+
+// GetAllUserTags returns every distinct tag name the caller has applied to
+// any song, for callers (e.g. plugins) that need to discover what tags
+// exist without scanning the whole library.
+func (api *Router) GetAllUserTags(r *http.Request) (*responses.Subsonic, error) {
+	tags, err := api.ds.MediaFileTag(r.Context()).AllTagNames()
+	if err != nil {
+		log.Error(r, err)
+		return nil, err
+	}
+
+	res := newResponse()
+	res.UserTags = &responses.UserTags{Tag: tags}
+	return res, nil
+}
+
+// GetSongsByUserTag returns every song the caller has tagged with the given
+// tag name, with full metadata - avoids requiring a separate getSong.view
+// call per matching track.
+func (api *Router) GetSongsByUserTag(r *http.Request) (*responses.Subsonic, error) {
+	p := req.Params(r)
+	tag, err := p.String("tag")
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := r.Context()
+	ids, err := api.ds.MediaFileTag(ctx).SongIDsForTag(tag)
+	if err != nil {
+		log.Error(r, err)
+		return nil, err
+	}
+
+	res := newResponse()
+	if len(ids) == 0 {
+		res.SongsByUserTag = &responses.Songs{}
+		return res, nil
+	}
+
+	mfs, err := api.ds.MediaFile(ctx).GetAll(model.QueryOptions{Filters: Eq{"media_file.id": ids}})
+	if err != nil {
+		log.Error(r, err)
+		return nil, err
+	}
+
+	res.SongsByUserTag = &responses.Songs{Songs: slice.MapWithArg(mfs, ctx, childFromMediaFile)}
 	return res, nil
 }
 

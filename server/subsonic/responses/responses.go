@@ -68,7 +68,8 @@ type Subsonic struct {
 	SonicMatches           *Array[SonicMatch]      `xml:"sonicMatch,omitempty"              json:"sonicMatch,omitempty"`
 
 	// Fork-specific: user tagging (media_file_tag)
-	UserTags *UserTags `xml:"userTags,omitempty"                                json:"userTags,omitempty"`
+	UserTags       *UserTags `xml:"userTags,omitempty"                          json:"userTags,omitempty"`
+	SongsByUserTag *Songs    `xml:"songsByUserTag,omitempty"                    json:"songsByUserTag,omitempty"`
 }
 
 const (
