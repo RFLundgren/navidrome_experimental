@@ -21,7 +21,7 @@ func NewMediaFileTagRepository(ctx context.Context, db dbx.Builder) model.MediaF
 	return r
 }
 
-func (r *mediaFileTagRepository) TagSong(mediaFileID, tagName string) error {
+func (r *mediaFileTagRepository) TagSong(mediaFileID, tagName, source string) error {
 	userID := loggedUser(r.ctx).ID
 	cond := And{
 		Eq{"user_id": userID},
@@ -33,8 +33,8 @@ func (r *mediaFileTagRepository) TagSong(mediaFileID, tagName string) error {
 		return err
 	}
 	ins := Insert(r.tableName).
-		Columns("user_id", "media_file_id", "tag_name", "created_at").
-		Values(userID, mediaFileID, tagName, time.Now())
+		Columns("user_id", "media_file_id", "tag_name", "source", "created_at").
+		Values(userID, mediaFileID, tagName, source, time.Now())
 	_, err = r.executeSQL(ins)
 	return err
 }
@@ -48,30 +48,42 @@ func (r *mediaFileTagRepository) UntagSong(mediaFileID, tagName string) error {
 	})
 }
 
-func (r *mediaFileTagRepository) TagsForSong(mediaFileID string) ([]string, error) {
+// bySourceIfSet adds a "source" equality condition when source is non-empty,
+// leaving the base condition untouched otherwise - "" means "any source".
+func bySourceIfSet(cond And, source string) And {
+	if source == "" {
+		return cond
+	}
+	return append(cond, Eq{"source": source})
+}
+
+func (r *mediaFileTagRepository) TagsForSong(mediaFileID, source string) ([]string, error) {
 	userID := loggedUser(r.ctx).ID
+	cond := bySourceIfSet(And{Eq{"user_id": userID}, Eq{"media_file_id": mediaFileID}}, source)
 	sel := r.newSelect().Columns("tag_name").
-		Where(And{Eq{"user_id": userID}, Eq{"media_file_id": mediaFileID}}).
+		Where(cond).
 		OrderBy("tag_name")
 	var res []string
 	err := r.queryAllSlice(sel, &res)
 	return res, err
 }
 
-func (r *mediaFileTagRepository) AllTagNames() ([]string, error) {
+func (r *mediaFileTagRepository) AllTagNames(source string) ([]string, error) {
 	userID := loggedUser(r.ctx).ID
+	cond := bySourceIfSet(And{Eq{"user_id": userID}}, source)
 	sel := r.newSelect().Distinct().Columns("tag_name").
-		Where(Eq{"user_id": userID}).
+		Where(cond).
 		OrderBy("tag_name")
 	var res []string
 	err := r.queryAllSlice(sel, &res)
 	return res, err
 }
 
-func (r *mediaFileTagRepository) SongIDsForTag(tagName string) ([]string, error) {
+func (r *mediaFileTagRepository) SongIDsForTag(tagName, source string) ([]string, error) {
 	userID := loggedUser(r.ctx).ID
+	cond := bySourceIfSet(And{Eq{"user_id": userID}, Eq{"tag_name": tagName}}, source)
 	sel := r.newSelect().Columns("media_file_id").
-		Where(And{Eq{"user_id": userID}, Eq{"tag_name": tagName}})
+		Where(cond)
 	var res []string
 	err := r.queryAllSlice(sel, &res)
 	return res, err

@@ -30,6 +30,7 @@ type dbMediaFile struct {
 	Participants     string `structs:"-" json:"-"`
 	Tags             string `structs:"-" json:"-"`
 	UserTags         string `structs:"-" json:"-"`
+	MyTags           string `structs:"-" json:"-"`
 	// These are necessary to map the correct names (rg_*) to the correct fields (RG*)
 	// without using `db` struct tags in the model.MediaFile struct
 	RgAlbumGain *float64 `structs:"-" json:"-"`
@@ -57,6 +58,9 @@ func (m *dbMediaFile) PostScan() error {
 	}
 	if m.UserTags != "" {
 		m.MediaFile.UserTags = strings.Split(m.UserTags, userTagsSeparator)
+	}
+	if m.MyTags != "" {
+		m.MediaFile.MyTags = strings.Split(m.MyTags, userTagsSeparator)
 	}
 	return nil
 }
@@ -232,12 +236,18 @@ func (r *mediaFileRepository) UpdateProbeData(id string, data string) error {
 const userTagsSeparator = "\x1f"
 
 func (r *mediaFileRepository) selectMediaFile(options ...model.QueryOptions) SelectBuilder {
+	userID := loggedUser(r.ctx).ID
 	sql := r.newSelect(options...).Columns("media_file.*", "library.path as library_path", "library.name as library_name").
 		LeftJoin("library on media_file.library_id = library.id").
 		Column(
 			"coalesce((select group_concat(mft.tag_name, ?) from media_file_tag mft "+
-				"where mft.media_file_id = media_file.id and mft.user_id = ?), '') as user_tags",
-			userTagsSeparator, loggedUser(r.ctx).ID,
+				"where mft.media_file_id = media_file.id and mft.user_id = ? and mft.source = ?), '') as user_tags",
+			userTagsSeparator, userID, model.MediaFileTagSourceAI,
+		).
+		Column(
+			"coalesce((select group_concat(mft.tag_name, ?) from media_file_tag mft "+
+				"where mft.media_file_id = media_file.id and mft.user_id = ? and mft.source = ?), '') as my_tags",
+			userTagsSeparator, userID, model.MediaFileTagSourceUser,
 		)
 	sql = r.withAnnotation(sql, "media_file.id")
 	sql = r.withBookmark(sql, "media_file.id")
