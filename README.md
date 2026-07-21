@@ -27,8 +27,8 @@ compatibility, same plugin system. This fork just adds:
 - 📁 **[Physical folder browsing](navidrome-folder-roadmap.md)** — navigate, play, and manage your library exactly
   as it's laid out on disk. See [below](#physical-folder-browsing-experimental) for the full feature list.
 - 🏷️ **User-defined song tagging** — private per-user labels on songs, independent of file metadata, with
-  tag-based filtering, bulk playlist add, and smart-playlist criteria support. See
-  [below](#user-defined-song-tagging-experimental) for details.
+  tag-based filtering, bulk playlist add, smart-playlist criteria support, and a plugin-facing API powering an
+  AI auto-tagging + auto-playlist ecosystem. See [below](#user-defined-song-tagging-experimental) for details.
 - ⏭️ **Skip / auto-pass disliked songs** — flag a song as skipped and the player automatically passes over it during
   playback, without deleting it. See [below](#skip--auto-pass-disliked-songs-experimental) for details.
 - 📡 **Enhanced scrobble attribution** — richer client/source/playback-mode context on every scrobble, available to
@@ -252,6 +252,16 @@ every matching song to a playlist in one click — no selecting songs one at a t
 ### 🔁 Smart playlists that follow your tags automatically
 Tags are usable as smart-playlist (`.nsp`) criteria, so a playlist can auto-update as you tag or untag songs,
 instead of needing to be rebuilt by hand every time something changes.
+
+### 🤖 A plugin-facing API, not just a UI feature
+The same private tagging system is exposed to plugins through five Subsonic-tier endpoints — `setUserTag.view`/
+`removeUserTag.view` to write and clear tags, `getUserTags.view` to read one song's tags, and `getAllUserTags.view`/
+`getSongsByUserTag.view` to discover every tag value in use and every song carrying a given one, without a plugin
+having to walk the whole library itself. This is what powers two companion projects, both outside this repo:
+[AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin), which classifies tracks by genre/mood/
+language using an AI provider and writes the results as tags, and
+[AI Mood Playlists](https://github.com/RFLundgren/ai-mood-playlists), which builds and maintains a playlist per
+discovered tag value from those classifications.
 
 Requested in [navidrome/navidrome discussion #4823](https://github.com/navidrome/navidrome/discussions/4823).
 
