@@ -5,6 +5,46 @@ package plugins
 import "encoding/json"
 import "fmt"
 
+// A single on-demand action the plugin supports
+type Action struct {
+	// Optional help text shown alongside the button
+	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+
+	// Button text shown in the admin UI
+	Label string `json:"label" yaml:"label" mapstructure:"label"`
+
+	// Unique identifier passed to the plugin's OnAction handler so it knows which
+	// action was triggered
+	Name string `json:"name" yaml:"name" mapstructure:"name"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *Action) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["label"]; raw != nil && !ok {
+		return fmt.Errorf("field label in Action: required")
+	}
+	if _, ok := raw["name"]; raw != nil && !ok {
+		return fmt.Errorf("field name in Action: required")
+	}
+	type Plain Action
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if len(plain.Label) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "label", 1)
+	}
+	if len(plain.Name) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "name", 1)
+	}
+	*j = Action(plain)
+	return nil
+}
+
 // Artwork service permissions for generating artwork URLs
 type ArtworkPermission struct {
 	// Explanation for why artwork access is needed
@@ -100,6 +140,12 @@ func (j *LibraryPermission) UnmarshalJSON(value []byte) error {
 
 // Plugin manifest for Navidrome plugins
 type Manifest struct {
+	// On-demand actions the plugin supports (e.g. a 'Test Connection' button on its
+	// config page), each triggered by a user from the admin UI rather than on a
+	// schedule or queue. Requires the plugin to export the action capability's
+	// nd_on_action function.
+	Actions []Action `json:"actions,omitempty" yaml:"actions,omitempty" mapstructure:"actions,omitempty"`
+
 	// The author of the plugin
 	Author string `json:"author" yaml:"author" mapstructure:"author"`
 

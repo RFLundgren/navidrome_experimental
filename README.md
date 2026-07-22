@@ -29,6 +29,9 @@ compatibility, same plugin system. This fork just adds:
 - 🏷️ **User-defined song tagging** — private per-user labels on songs, independent of file metadata, with
   tag-based filtering, bulk playlist add, smart-playlist criteria support, and a plugin-facing API powering an
   AI auto-tagging + auto-playlist ecosystem. See [below](#user-defined-song-tagging-experimental) for details.
+- 🔘 **On-demand plugin actions** — a "Test Connection"-style button any plugin can add to its own config page,
+  for things that need a one-off run rather than a schedule (e.g. validating an AI provider's API key before a
+  real scan). See [below](#on-demand-plugin-actions-experimental) for details.
 - ⏭️ **Skip / auto-pass disliked songs** — flag a song as skipped and the player automatically passes over it during
   playback, without deleting it. See [below](#skip--auto-pass-disliked-songs-experimental) for details.
 - 📡 **Enhanced scrobble attribution** — richer client/source/playback-mode context on every scrobble, available to
@@ -295,6 +298,38 @@ This API is what powers two companion projects, both outside this repo:
 per discovered AI Tag value from those classifications.
 
 Requested in [navidrome/navidrome discussion #4823](https://github.com/navidrome/navidrome/discussions/4823).
+
+## On-Demand Plugin Actions (Experimental)
+
+Navidrome's plugin config page previously had only one way to interact with a plugin: edit its config fields and
+hit Save. There was no way for a plugin to expose a one-off "do something now" action — useful for things you
+want to trigger deliberately rather than wait for a schedule, like validating an API key before committing to a
+real run.
+
+### 🔘 A button, not just a form
+Any plugin can declare one or more named actions in its `manifest.json` (a `name`, a button `label`, and an
+optional `description`). Each declared action shows up as its own button in an **Actions** section on that
+plugin's config page — no core Navidrome code changes needed per plugin, the button and its label are entirely
+driven by what the plugin declares.
+
+### ✅ Immediate result, right there in the UI
+Clicking the button calls the plugin synchronously and shows what it returned directly under the button — a
+success message, or the plugin's own error text if something went wrong (e.g. an invalid API key). No need to dig
+through server logs to find out whether it worked.
+
+### 🤖 First real use: AI Auto-Tagging's "Test Model" button
+[AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin) uses this to add a **Test Model** button
+to its own config page — it sends one small request to your configured AI provider/model/API key, without
+touching your library or writing any tags, so you can confirm your settings actually work before kicking off a
+real scan across potentially thousands of tracks (and real provider cost). See that plugin's README for what the
+button does and what the result messages mean.
+
+### 🔌 For plugin developers
+Implementing an action requires the plugin to export the new action capability's `nd_on_action` function
+(`github.com/navidrome/navidrome/plugins/pdk/go/action` for Go plugins - register it alongside your other
+capabilities, then dispatch on `ActionRequest.Name` in your handler) and declare the same action name(s) in
+`manifest.json`'s `actions` array. The plugin must also be enabled/loaded for its actions to run - like config
+changes, an action call goes to the currently loaded instance.
 
 ## Skip / Auto-Pass Disliked Songs (Experimental)
 

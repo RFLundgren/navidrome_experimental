@@ -490,7 +490,8 @@
         "configuration": "Configuration",
         "manifest": "Manifest",
         "usersPermission": "Users Permission",
-        "libraryPermission": "Library Permission"
+        "libraryPermission": "Library Permission",
+        "actions": "Actions"
       },
       "status": {
         "enabled": "Enabled",
@@ -528,7 +529,9 @@
         "noLibraries": "No libraries selected",
         "librariesRequired": "This plugin requires access to library information. Select which libraries the plugin can access, or enable 'Allow all libraries'.",
         "allowWriteAccessHelp": "When enabled, the plugin can modify files in the library directories. By default, plugins have read-only access.",
-        "requiredHosts": "Required hosts"
+        "requiredHosts": "Required hosts",
+        "actionRunning": "Running...",
+        "actionsDisabledHelp": "Enable the plugin to run its actions"
       },
       "placeholders": {
         "configKey": "key",

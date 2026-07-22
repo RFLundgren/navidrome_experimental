@@ -20,6 +20,7 @@ import { StatusCard } from './StatusCard'
 import { InfoCard } from './InfoCard'
 import { ManifestSection } from './ManifestSection'
 import { ConfigCard } from './ConfigCard'
+import { ActionsCard } from './ActionsCard'
 import { UsersPermissionCard } from './UsersPermissionCard'
 import { LibraryPermissionCard } from './LibraryPermissionCard'
 
@@ -299,6 +300,13 @@ const PluginShowLayout = () => {
           onConfigDataChange={handleConfigDataChange}
           classes={classes}
           translate={translate}
+        />
+
+        <ActionsCard
+          manifest={manifest}
+          pluginId={record.id}
+          enabled={record.enabled}
+          classes={classes}
         />
 
         <UsersPermissionCard
