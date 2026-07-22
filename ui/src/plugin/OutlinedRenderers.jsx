@@ -25,8 +25,13 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  IconButton,
+  InputAdornment,
+  Tooltip,
 } from '@material-ui/core'
+import RestoreIcon from '@material-ui/icons/Restore'
 import { makeStyles } from '@material-ui/core/styles'
+import { useTranslate } from 'react-admin'
 import merge from 'lodash/merge'
 
 const useStyles = makeStyles(
@@ -86,6 +91,7 @@ const OutlinedControl = (props) => {
     type = 'text',
     inputProps: extraInputProps = {},
     onChange,
+    endAdornment,
   } = props
 
   const {
@@ -119,6 +125,7 @@ const OutlinedControl = (props) => {
       error={showError}
       helperText={helperText}
       inputProps={extraInputProps}
+      InputProps={endAdornment ? { endAdornment } : undefined}
       className={classes.control}
     />
   )
@@ -126,7 +133,8 @@ const OutlinedControl = (props) => {
 
 // Text control wrapper
 const OutlinedTextControl = (props) => {
-  const { path, handleChange, schema, config, uischema } = props
+  const translate = useTranslate()
+  const { path, handleChange, schema, config, uischema, data } = props
   const appliedUiSchemaOptions = merge({}, config, uischema?.options)
 
   const inputProps = {}
@@ -134,12 +142,37 @@ const OutlinedTextControl = (props) => {
     inputProps.maxLength = schema.maxLength
   }
 
+  // Opt-in via uiSchema options: { "resettable": true }. Only makes sense for
+  // fields with a meaningful schema default (e.g. a pre-filled vocabulary
+  // list) - shows a small icon to restore that default with one click, since
+  // re-typing a long comma-separated list from memory after trimming it down
+  // isn't realistic.
+  const canReset =
+    appliedUiSchemaOptions.resettable &&
+    schema?.default !== undefined &&
+    (data ?? '') !== schema.default
+
+  const endAdornment = canReset ? (
+    <InputAdornment position="end">
+      <Tooltip title={translate('resources.plugin.actions.resetToDefault')}>
+        <IconButton
+          size="small"
+          onClick={() => handleChange(path, schema.default)}
+          aria-label={translate('resources.plugin.actions.resetToDefault')}
+        >
+          <RestoreIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </InputAdornment>
+  ) : undefined
+
   return (
     <OutlinedControl
       {...props}
       type={appliedUiSchemaOptions.format === 'password' ? 'password' : 'text'}
       inputProps={inputProps}
       onChange={(ev) => handleChange(path, ev.target.value)}
+      endAdornment={endAdornment}
     />
   )
 }

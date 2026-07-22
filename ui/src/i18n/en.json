@@ -503,7 +503,8 @@
         "disabledUsersRequired": "Select users before enabling",
         "disabledLibrariesRequired": "Select libraries before enabling",
         "addConfig": "Add Configuration",
-        "rescan": "Rescan"
+        "rescan": "Rescan",
+        "resetToDefault": "Reset to default"
       },
       "notifications": {
         "enabled": "Plugin enabled",
