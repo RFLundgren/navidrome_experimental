@@ -6,12 +6,16 @@ import { useTranslate, MenuItemLink, getResources } from 'react-admin'
 import ViewListIcon from '@material-ui/icons/ViewList'
 import AlbumIcon from '@material-ui/icons/Album'
 import FolderIcon from '@material-ui/icons/Folder'
+import CategoryIcon from '@material-ui/icons/Category'
+import MoodIcon from '@material-ui/icons/Mood'
+import LocalOfferIcon from '@material-ui/icons/LocalOffer'
 import SubMenu from './SubMenu'
 import { humanize, pluralize } from 'inflection'
 import albumLists from '../album/albumLists'
 import PlaylistsSubMenu from './PlaylistsSubMenu'
 import LibrarySelector from '../common/LibrarySelector'
 import config from '../config'
+import { TAG_DASHBOARDS } from '../tagDashboard/tagDashboards'
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -58,6 +62,18 @@ const Menu = ({ dense = false }) => {
   )
   const showPodcasts = useSelector(
     (state) => state.settings.showPodcasts !== false,
+  )
+  const showGenreView = useSelector(
+    (state) => state.settings.showGenreView !== false,
+  )
+  const showAiGenreView = useSelector(
+    (state) => state.settings.showAiGenreView !== false,
+  )
+  const showAiMoodView = useSelector(
+    (state) => state.settings.showAiMoodView !== false,
+  )
+  const showMyTagsView = useSelector(
+    (state) => state.settings.showMyTagsView !== false,
   )
 
   // TODO State is not persisted in mobile when you close the sidebar menu. Move to redux?
@@ -142,10 +158,53 @@ const Menu = ({ dense = false }) => {
           dense={dense}
         />
       )}
+      {showGenreView && (
+        <MenuItemLink
+          to="/genre"
+          activeClassName={classes.active}
+          primaryText={translate('resources.genre.name', { smart_count: 2 })}
+          leftIcon={<CategoryIcon />}
+          sidebarIsOpen={open}
+          dense={dense}
+        />
+      )}
+      {showAiGenreView && (
+        <MenuItemLink
+          to={TAG_DASHBOARDS.aiGenre.path}
+          activeClassName={classes.active}
+          primaryText={translate('resources.aiGenre.name', {
+            smart_count: 2,
+          })}
+          leftIcon={<CategoryIcon />}
+          sidebarIsOpen={open}
+          dense={dense}
+        />
+      )}
+      {showAiMoodView && (
+        <MenuItemLink
+          to={TAG_DASHBOARDS.aiMood.path}
+          activeClassName={classes.active}
+          primaryText={translate('resources.aiMood.name', { smart_count: 2 })}
+          leftIcon={<MoodIcon />}
+          sidebarIsOpen={open}
+          dense={dense}
+        />
+      )}
+      {showMyTagsView && (
+        <MenuItemLink
+          to={TAG_DASHBOARDS.myTags.path}
+          activeClassName={classes.active}
+          primaryText={translate('resources.myTags.name', { smart_count: 2 })}
+          leftIcon={<LocalOfferIcon />}
+          sidebarIsOpen={open}
+          dense={dense}
+        />
+      )}
       {resources
         .filter(
           (r) =>
             r.name !== 'folder' &&
+            r.name !== 'genre' &&
             (r.name !== 'podcastChannel' || showPodcasts) &&
             subItems(undefined)(r),
         )

@@ -173,6 +173,21 @@
         "mergePartialFailure": "%{failed} merge(s) failed (%{names}) — already merged elsewhere, or a naming conflict. The rest succeeded."
       }
     },
+    "tagDashboard": {
+      "chipSongCount": "%{smart_count} song |||| %{smart_count} songs"
+    },
+    "aiGenre": {
+      "name": "AI Genre |||| AI Genres",
+      "empty": "No AI genre tags found yet - install and configure AI Auto-Tagging to start classifying your library."
+    },
+    "aiMood": {
+      "name": "AI Mood |||| AI Moods",
+      "empty": "No AI mood tags found yet - install and configure AI Auto-Tagging to start classifying your library."
+    },
+    "myTags": {
+      "name": "My Tag |||| My Tags",
+      "empty": "No personal tags yet - add one to a song from its \"Edit Tags\" context menu action."
+    },
     "artist": {
       "name": "Artist |||| Artists",
       "fields": {
@@ -748,6 +763,10 @@
         "desktop_notifications": "Desktop Notifications",
         "showFolderView": "Show Folder View",
         "showPodcasts": "Show Podcasts",
+        "showGenreView": "Show Genre View",
+        "showAiGenreView": "Show AI Genre Dashboard",
+        "showAiMoodView": "Show AI Mood Dashboard",
+        "showMyTagsView": "Show My Tags Dashboard",
         "lastfmNotConfigured": "Last.fm API-Key is not configured",
         "lastfmScrobbling": "Scrobble to Last.fm",
         "listenBrainzScrobbling": "Scrobble to ListenBrainz",
