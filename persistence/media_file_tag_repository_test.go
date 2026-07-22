@@ -1,0 +1,134 @@
+package persistence
+
+import (
+	"context"
+
+	"github.com/navidrome/navidrome/log"
+	"github.com/navidrome/navidrome/model"
+	"github.com/navidrome/navidrome/model/request"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+var _ = Describe("MediaFileTagRepository", func() {
+	var repo model.MediaFileTagRepository
+
+	BeforeEach(func() {
+		ctx := log.NewContext(context.TODO())
+		ctx = request.WithUser(ctx, adminUser)
+		repo = NewMediaFileTagRepository(ctx, GetDBXBuilder())
+	})
+
+	AfterEach(func() {
+		for _, tagName := range []string{"genre:rock", "genre:jazz", "my-favorite"} {
+			_ = repo.UntagSong(songDayInALife.ID, tagName)
+			_ = repo.UntagSong(songComeTogether.ID, tagName)
+		}
+	})
+
+	Describe("TagSong", func() {
+		It("records the given source", func() {
+			Expect(repo.TagSong(songDayInALife.ID, "genre:rock", model.MediaFileTagSourceAI)).To(Succeed())
+
+			aiTags, err := repo.TagsForSong(songDayInALife.ID, model.MediaFileTagSourceAI)
+			Expect(err).To(BeNil())
+			Expect(aiTags).To(ContainElement("genre:rock"))
+
+			userTags, err := repo.TagsForSong(songDayInALife.ID, model.MediaFileTagSourceUser)
+			Expect(err).To(BeNil())
+			Expect(userTags).ToNot(ContainElement("genre:rock"))
+		})
+
+		It("is idempotent - tagging the same song/tag twice does not error or duplicate", func() {
+			Expect(repo.TagSong(songDayInALife.ID, "genre:rock", model.MediaFileTagSourceAI)).To(Succeed())
+			Expect(repo.TagSong(songDayInALife.ID, "genre:rock", model.MediaFileTagSourceAI)).To(Succeed())
+
+			tags, err := repo.TagsForSong(songDayInALife.ID, "")
+			Expect(err).To(BeNil())
+			count := 0
+			for _, t := range tags {
+				if t == "genre:rock" {
+					count++
+				}
+			}
+			Expect(count).To(Equal(1))
+		})
+	})
+
+	Describe("TagsForSong", func() {
+		BeforeEach(func() {
+			Expect(repo.TagSong(songDayInALife.ID, "genre:rock", model.MediaFileTagSourceAI)).To(Succeed())
+			Expect(repo.TagSong(songDayInALife.ID, "my-favorite", model.MediaFileTagSourceUser)).To(Succeed())
+		})
+
+		It("returns tags of any source when source is empty", func() {
+			tags, err := repo.TagsForSong(songDayInALife.ID, "")
+			Expect(err).To(BeNil())
+			Expect(tags).To(ContainElements("genre:rock", "my-favorite"))
+		})
+
+		It("filters to AI-sourced tags only", func() {
+			tags, err := repo.TagsForSong(songDayInALife.ID, model.MediaFileTagSourceAI)
+			Expect(err).To(BeNil())
+			Expect(tags).To(ContainElement("genre:rock"))
+			Expect(tags).ToNot(ContainElement("my-favorite"))
+		})
+
+		It("filters to user-sourced tags only", func() {
+			tags, err := repo.TagsForSong(songDayInALife.ID, model.MediaFileTagSourceUser)
+			Expect(err).To(BeNil())
+			Expect(tags).To(ContainElement("my-favorite"))
+			Expect(tags).ToNot(ContainElement("genre:rock"))
+		})
+	})
+
+	Describe("AllTagNames", func() {
+		BeforeEach(func() {
+			Expect(repo.TagSong(songDayInALife.ID, "genre:rock", model.MediaFileTagSourceAI)).To(Succeed())
+			Expect(repo.TagSong(songComeTogether.ID, "my-favorite", model.MediaFileTagSourceUser)).To(Succeed())
+		})
+
+		It("filters distinct tag names by source", func() {
+			aiNames, err := repo.AllTagNames(model.MediaFileTagSourceAI)
+			Expect(err).To(BeNil())
+			Expect(aiNames).To(ContainElement("genre:rock"))
+			Expect(aiNames).ToNot(ContainElement("my-favorite"))
+
+			userNames, err := repo.AllTagNames(model.MediaFileTagSourceUser)
+			Expect(err).To(BeNil())
+			Expect(userNames).To(ContainElement("my-favorite"))
+			Expect(userNames).ToNot(ContainElement("genre:rock"))
+		})
+	})
+
+	Describe("SongIDsForTag", func() {
+		BeforeEach(func() {
+			Expect(repo.TagSong(songDayInALife.ID, "genre:jazz", model.MediaFileTagSourceAI)).To(Succeed())
+			Expect(repo.TagSong(songComeTogether.ID, "genre:jazz", model.MediaFileTagSourceUser)).To(Succeed())
+		})
+
+		It("returns every song with the tag when source is empty", func() {
+			ids, err := repo.SongIDsForTag("genre:jazz", "")
+			Expect(err).To(BeNil())
+			Expect(ids).To(ContainElements(songDayInALife.ID, songComeTogether.ID))
+		})
+
+		It("filters to songs tagged by the given source only", func() {
+			ids, err := repo.SongIDsForTag("genre:jazz", model.MediaFileTagSourceAI)
+			Expect(err).To(BeNil())
+			Expect(ids).To(ContainElement(songDayInALife.ID))
+			Expect(ids).ToNot(ContainElement(songComeTogether.ID))
+		})
+	})
+
+	Describe("UntagSong", func() {
+		It("removes the tag regardless of source", func() {
+			Expect(repo.TagSong(songDayInALife.ID, "my-favorite", model.MediaFileTagSourceUser)).To(Succeed())
+			Expect(repo.UntagSong(songDayInALife.ID, "my-favorite")).To(Succeed())
+
+			tags, err := repo.TagsForSong(songDayInALife.ID, "")
+			Expect(err).To(BeNil())
+			Expect(tags).ToNot(ContainElement("my-favorite"))
+		})
+	})
+})

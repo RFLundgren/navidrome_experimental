@@ -346,18 +346,34 @@ turns out to matter in practice.
 language, mood, etc. using an AI service, so the whole library becomes filterable by AI-suggested tags instead of
 manually maintained playlists per genre/language.
 
-**Status:** Reassessed 2026-07-18, after `#4823` shipped — no longer blocked. Split into two pieces with the split
-resolved 2026-07-20: the plugin itself lives in its own repo,
-[AI-Auto-Tagging-Plugin](https://github.com/RFLundgren/AI-Auto-Tagging-Plugin) (not yet public), not in
-`plugins/examples/` here — it only talks to Navidrome through the plugin API, the same reasoning that already put
-Cirque and Pulse in their own repos rather than this one. Full design doc, build plan, and the open product
-decision (should AI tags be private-per-user or shared library-wide) live there, not duplicated here.
+**Status:** Shipped and live-tested in production against a real Gemini API key. The plugin itself lives in its own
+repo, [AI-Auto-Tagging-Plugin](https://github.com/RFLundgren/AI-Auto-Tagging-Plugin), not in `plugins/examples/`
+here — it only talks to Navidrome through the plugin API, the same reasoning that already put Cirque and Pulse in
+their own repos rather than this one. A companion project,
+[AI Mood Playlists](https://github.com/RFLundgren/AI-Mood-Playlists-Plugin), builds and maintains actual playlists
+from these tags automatically. Full design doc and build plan live in those repos, not duplicated here.
 
-**What's left in this repo:** a small prerequisite, tracked here since it's core-fork work — three new
-Subsonic-tier endpoints (`setUserTag`, `removeUserTag`, `getUserTags`) so a plugin can write to the existing
-`media_file_tag` table, mirroring `skip`/`unskip` exactly (`server/subsonic/media_annotation.go`, registered in
-`server/subsonic/api.go`'s existing authenticated route group). Zero new persistence code — those repository
-methods already scope via `loggedUser(ctx)` internally. **Effort: Small. Not started.**
+**What's in this repo:** five Subsonic-tier endpoints so the plugin can write/read tags without a separate identity
+of its own — `setUserTag`, `removeUserTag`, `getUserTags`, `getAllUserTags`, `getSongsByUserTag`
+(`server/subsonic/media_annotation.go`), mirroring `skip`/`unskip`.
+
+**AI Tags vs. My Tags separation (2026-07-22):** `media_file_tag` originally had no way to distinguish a tag AI
+Auto-Tagging wrote from one a human added via the pre-existing "Edit Tags" dialog (`#4823`'s Phase 1/3
+UI) — both landed in the same table, same shape. Added a `source` column (`ai` | `user`, migration
+`20270101010115`, backfilled by tag-name prefix for existing rows: `genre:`/`mood:`/`language:` → `ai`, everything
+else → `user`, since only AI Auto-Tagging ever uses that prefix convention). The two write paths now imply their
+own source with no caller changes needed: Subsonic's `setUserTag.view` (AI Auto-Tagging's only entry point) always
+writes `ai`; the native REST `/mediaFileTag` POST (the "Edit Tags" dialog's entry point) always writes `user`. Reads
+split the same way — `getUserTags.view`/`getAllUserTags.view`/`getSongsByUserTag.view` are AI-only (so a manually
+added tag can't fool AI Auto-Tagging's "already tagged, skip it" scan check, and can't leak into
+ai-mood-playlists' tag-based playlist building), while the native REST GETs accept an optional `?source=` filter
+and default to "any" for backward compatibility. `model.MediaFile` now exposes both `UserTags` (AI-sourced,
+displayed as the "AI Tags" column) and a new `MyTags` (user-sourced, displayed as a new "My Tags" column) in the
+Songs list. The generic `user_tag` smart-playlist filter/criteria intentionally still matches either source — it's
+a "my own tag, however it got there" filter, not an AI-vs-human distinction. **Effort: Small. Done** (repository
+layer covered by Ginkgo tests in `persistence/media_file_tag_repository_test.go`; not yet verified with a local
+`go build`/`go test` run — see this repo's known pre-existing cgo/sqlite3 toolchain limitation noted elsewhere in
+this doc).
 
 ---
 

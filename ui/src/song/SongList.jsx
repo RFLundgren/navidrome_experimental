@@ -194,6 +194,13 @@ const SongList = (props) => {
           sortable={false}
         />
       ),
+      myTags: (
+        <FunctionField
+          source="myTags"
+          render={(r) => (r.myTags || []).join(', ')}
+          sortable={false}
+        />
+      ),
       path: <PathField source="path" />,
       createdAt: (
         <DateField source="createdAt" sortBy="recently_added" showTime />
@@ -214,6 +221,7 @@ const SongList = (props) => {
       'mood',
       'comment',
       'userTags',
+      'myTags',
       'path',
       'createdAt',
     ],

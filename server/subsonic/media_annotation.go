@@ -220,7 +220,10 @@ func (api *Router) SetUserTag(r *http.Request) (*responses.Subsonic, error) {
 	}
 
 	log.Debug(r, "Setting user tag", "id", id, "tag", tag)
-	err = api.ds.MediaFileTag(r.Context()).TagSong(id, tag)
+	// Subsonic's *UserTag* family is only ever called by the AI Auto-Tagging
+	// plugin (there's no human-facing UI on this API surface) - hardcoding
+	// the source here means that plugin needs no changes at all.
+	err = api.ds.MediaFileTag(r.Context()).TagSong(id, tag, model.MediaFileTagSourceAI)
 	if err != nil {
 		log.Error(r, err)
 		return nil, err
@@ -257,7 +260,10 @@ func (api *Router) GetUserTags(r *http.Request) (*responses.Subsonic, error) {
 		return nil, err
 	}
 
-	tags, err := api.ds.MediaFileTag(r.Context()).TagsForSong(id)
+	// AI-only: this is what AI Auto-Tagging's "already tagged, skip it" scan
+	// check relies on. If it also saw a human's manually-added My Tag here,
+	// a track a person tagged before AI ever ran would be wrongly skipped.
+	tags, err := api.ds.MediaFileTag(r.Context()).TagsForSong(id, model.MediaFileTagSourceAI)
 	if err != nil {
 		log.Error(r, err)
 		return nil, err
@@ -268,11 +274,11 @@ func (api *Router) GetUserTags(r *http.Request) (*responses.Subsonic, error) {
 	return res, nil
 }
 
-// GetAllUserTags returns every distinct tag name the caller has applied to
-// any song, for callers (e.g. plugins) that need to discover what tags
-// exist without scanning the whole library.
+// GetAllUserTags returns every distinct AI-written tag name the caller has
+// applied to any song, for callers (e.g. plugins) that need to discover what
+// tags exist without scanning the whole library.
 func (api *Router) GetAllUserTags(r *http.Request) (*responses.Subsonic, error) {
-	tags, err := api.ds.MediaFileTag(r.Context()).AllTagNames()
+	tags, err := api.ds.MediaFileTag(r.Context()).AllTagNames(model.MediaFileTagSourceAI)
 	if err != nil {
 		log.Error(r, err)
 		return nil, err
@@ -283,9 +289,9 @@ func (api *Router) GetAllUserTags(r *http.Request) (*responses.Subsonic, error) 
 	return res, nil
 }
 
-// GetSongsByUserTag returns every song the caller has tagged with the given
-// tag name, with full metadata - avoids requiring a separate getSong.view
-// call per matching track.
+// GetSongsByUserTag returns every song the caller has tagged (via AI Auto-
+// Tagging) with the given tag name, with full metadata - avoids requiring a
+// separate getSong.view call per matching track.
 func (api *Router) GetSongsByUserTag(r *http.Request) (*responses.Subsonic, error) {
 	p := req.Params(r)
 	tag, err := p.String("tag")
@@ -294,7 +300,7 @@ func (api *Router) GetSongsByUserTag(r *http.Request) (*responses.Subsonic, erro
 	}
 
 	ctx := r.Context()
-	ids, err := api.ds.MediaFileTag(ctx).SongIDsForTag(tag)
+	ids, err := api.ds.MediaFileTag(ctx).SongIDsForTag(tag, model.MediaFileTagSourceAI)
 	if err != nil {
 		log.Error(r, err)
 		return nil, err
