@@ -2,9 +2,6 @@ import React from 'react'
 import PropTypes from 'prop-types'
 import {
   RecordContextProvider,
-  ReferenceManyField,
-  Datagrid,
-  TextField,
   Title as RaTitle,
   TopToolbar,
   sanitizeListRestProps,
@@ -12,7 +9,7 @@ import {
 import { useDispatch } from 'react-redux'
 import { makeStyles } from '@material-ui/core/styles'
 import {
-  DurationField,
+  FilterableSongSection,
   Title,
   ShuffleAllButton,
   useResourceRefresh,
@@ -38,9 +35,6 @@ const useStyles = makeStyles(
         padding: '0 !important',
         background: 'transparent',
       },
-    },
-    section: {
-      margin: '1rem 1.5rem',
     },
   }),
   { name: 'NDTagDashboardShow' },
@@ -81,23 +75,12 @@ export const TagDashboardShow = ({ dashboard, match }) => {
           />
         </TopToolbar>
       </div>
-      <div className={classes.section}>
-        <ReferenceManyField
-          reference="song"
-          target="user_tag"
-          filter={{ user_tag: tagName, missing: false }}
-          sort={{ field: 'recently_added', order: 'DESC' }}
-          perPage={100}
-          pagination={null}
-        >
-          <Datagrid rowClick={handleRowClick} bulkActionButtons={false}>
-            <TextField source="title" />
-            <TextField source="artist" />
-            <TextField source="album" />
-            <DurationField source="duration" />
-          </Datagrid>
-        </ReferenceManyField>
-      </div>
+      <FilterableSongSection
+        target="user_tag"
+        baseFilter={{ user_tag: tagName, missing: false }}
+        sort={{ field: 'recently_added', order: 'DESC' }}
+        rowClick={handleRowClick}
+      />
     </RecordContextProvider>
   )
 }
