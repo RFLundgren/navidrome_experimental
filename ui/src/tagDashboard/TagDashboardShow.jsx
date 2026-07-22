@@ -11,7 +11,12 @@ import {
 } from 'react-admin'
 import { useDispatch } from 'react-redux'
 import { makeStyles } from '@material-ui/core/styles'
-import { DurationField, Title, ShuffleAllButton, useResourceRefresh } from '../common'
+import {
+  DurationField,
+  Title,
+  ShuffleAllButton,
+  useResourceRefresh,
+} from '../common'
 import { setTrack } from '../actions'
 import { CreatePlaylistFromTagButton } from './CreatePlaylistFromTagButton'
 
@@ -67,10 +72,7 @@ export const TagDashboardShow = ({ dashboard, match }) => {
     <RecordContextProvider value={{ id: tagName, name: displayName }}>
       <RaTitle title={<Title subTitle={displayName} />} />
       <div className={classes.actionsContainer}>
-        <TopToolbar
-          className={classes.toolbar}
-          {...sanitizeListRestProps({})}
-        >
+        <TopToolbar className={classes.toolbar} {...sanitizeListRestProps({})}>
           <ShuffleAllButton filters={{ user_tag: tagName }} />
           <CreatePlaylistFromTagButton
             tagName={tagName}

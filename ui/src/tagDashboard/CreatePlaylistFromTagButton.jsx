@@ -23,7 +23,11 @@ const DEFAULT_TRACK_COUNT = 50
 // /mediaFileTag/:tag/randomSongs (mirrors /genre/:id/randomSongs) instead of
 // filtering by genre_id. Reuses the genre createPlaylist dialog's i18n
 // strings since the dialog itself isn't genre-specific wording.
-export const CreatePlaylistFromTagButton = ({ tagName, displayName, source }) => {
+export const CreatePlaylistFromTagButton = ({
+  tagName,
+  displayName,
+  source,
+}) => {
   const translate = useTranslate()
   const notify = useNotify()
   const dispatch = useDispatch()

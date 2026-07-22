@@ -12,6 +12,7 @@ import (
 	"github.com/navidrome/navidrome/core/matcher"
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/model/request"
+	"github.com/navidrome/navidrome/persistence"
 )
 
 func (api *Router) addMediaFileTagRoutes(r chi.Router) {
@@ -113,7 +114,7 @@ func tagSourceFilter(ctx context.Context, tagName, source string) Sqlizer {
 	if source != "" {
 		cond = append(cond, Eq{"mft.source": source})
 	}
-	return Exists("media_file_tag mft", cond)
+	return persistence.Exists("media_file_tag mft", cond)
 }
 
 // tagRandomSongs mirrors genreRandomSongs (see genre.go) for the "Create
