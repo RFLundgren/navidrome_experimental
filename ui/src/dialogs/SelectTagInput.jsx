@@ -64,11 +64,15 @@ export const SelectTagInput = ({ mediaFileId }) => {
   const [songTags, setSongTags] = useState([])
   const [loading, setLoading] = useState(false)
 
+  // This dialog is the "My Tags" editor - AI-written tags are managed
+  // entirely by the AI Auto-Tagging plugin (its vocabulary config, its own
+  // classification runs) and must never be toggled on/off here, so both
+  // fetches are scoped to source=user.
   useEffect(() => {
     Promise.all([
-      httpClient(`${REST_URL}/mediaFileTag/names`),
+      httpClient(`${REST_URL}/mediaFileTag/names?source=user`),
       httpClient(
-        `${REST_URL}/mediaFileTag?media_file_id=${encodeURIComponent(mediaFileId)}`,
+        `${REST_URL}/mediaFileTag?media_file_id=${encodeURIComponent(mediaFileId)}&source=user`,
       ),
     ])
       .then(([names, tags]) => {
