@@ -15,12 +15,12 @@ it serves this fork's own use (Cirque compatibility, personal library workflow).
 
 ## At a glance
 
-**7 shipped · 5 planned, ready to build · 3 in the backlog (assessed, not prioritized)**
+**8 shipped · 4 planned, ready to build · 3 in the backlog (assessed, not prioritized)**
 
 Nothing below is currently mid-build — everything is either done, or scoped-but-not-started. When something is
 picked up, move it into its own "🔨 In progress" section at the top so it's visible at a glance.
 
-### ✅ Shipped (7)
+### ✅ Shipped (8)
 
 | Feature | Source | Effort (est. → actual) |
 |---|---|---|
@@ -31,8 +31,9 @@ picked up, move it into its own "🔨 In progress" section at the top so it's vi
 | Podcast support (Subsonic API) | own project, [PODCAST_PLAN.md](PODCAST_PLAN.md) | Large → Large |
 | Physical folder browsing | own project, [navidrome-folder-roadmap.md](navidrome-folder-roadmap.md) | Large → Large |
 | Enhanced scrobble attribution (Pulse integration) | own project | Small → Small |
+| AI Tags / My Tags exploration dashboards + view toggles | own project, follow-up to User-defined song tagging | Medium → Medium |
 
-### 📋 Planned — scoped, ready to build (5)
+### 📋 Planned — scoped, ready to build (4)
 
 | Feature | Source | Effort | Value |
 |---|---|---|---|
@@ -40,7 +41,6 @@ picked up, move it into its own "🔨 In progress" section at the top so it's vi
 | Playlist "consume mode" (auto-remove on finish) | [#3276](https://github.com/navidrome/navidrome/discussions/3276) | Small–Medium | Low–Medium |
 | AI-based auto-tagging/classification (as a plugin) | [#3145](https://github.com/navidrome/navidrome/discussions/3145); plugin itself built separately, see [AI-Auto-Tagging-Plugin](https://github.com/RFLundgren/AI-Auto-Tagging-Plugin) | Small (write path, this repo) | Medium |
 | Classical music: show Work/Movement in the web UI | [#2953](https://github.com/navidrome/navidrome/discussions/2953) | Medium | Medium (niche but well-served by existing data) |
-| AI Tags / My Tags exploration dashboards + view toggles | own project, follow-up to User-defined song tagging | Medium | Medium–High |
 
 Also planned, tracked in a separate doc rather than duplicated here: **Podcast Phase 4** — resume playback
 position, a cross-channel "Up Next" queue, and OPML import/export. See
@@ -254,6 +254,43 @@ playback position, a cross-channel "up next" queue, OPML import/export), see [PO
 plugins via the same `ScrobbleRequest`/`NowPlayingRequest` types, for this fork's own Pulse companion project. See
 the [README](README.md#enhanced-scrobble-attribution-pulse-integration) for details.
 
+### AI Tags / My Tags exploration dashboards + view toggles
+
+**Source:** own project, direct follow-up to the AI Tags vs. My Tags source-separation work (see "User-defined
+song tagging" above) — three chip-index dashboards (AI Genre, AI Mood, My Tags) in the same visual style as Genre
+Exploration, plus personal-menu toggles to show/hide each independently.
+
+**Status:** Shipped, matching the scoping almost exactly (see below for the one confirmed design call).
+
+- **Reused as scoped, with zero surprises:** the `source` column split (AI Genre/AI Mood are a client-side
+  `genre:`/`mood:` prefix split of `source=ai`; My Tags is `source=user`), the existing `user_tag` song filter for
+  a per-tag landing page's song list, the Folder toggle pattern (generalized into one `ViewToggle` component + a
+  `SET_VIEW_TOGGLE` action, rather than four near-duplicate dedicated actions/reducer cases), and Genre
+  Exploration's filter-based "Create Playlist" mechanism (`genreRandomSongs` → `tagRandomSongs`, same
+  overfetch/dedup/exclude-skipped approach, filtered by tag name + source instead of `genre_id`).
+- **The one genuinely new backend piece, as predicted:** `MediaFileTagRepository.TagCounts(source)` — a
+  `COUNT(DISTINCT media_file_id) ... GROUP BY tag_name` aggregation, exposed via a new `GET /mediaFileTag/counts`
+  endpoint, plus `GET /mediaFileTag/:tag/randomSongs` for the playlist action.
+- **One thing found only once actually building it, not visible from scoping alone:** replicating Genre
+  Exploration's exact architecture (a full react-admin Resource with `useShowController`/`ReferenceManyField`
+  reading a real backing record) doesn't fit tag values cleanly, since they have no DB table/id the way genre
+  does. Built as lighter custom pages instead — a plain fetch for the chip index, a React Router route (not a
+  Resource route) for the per-tag page, wrapped in a bare `RecordContextProvider` (a react-admin/ra-core primitive
+  that pre-dates the officially-documented v4-only feature, confirmed present in this app's installed react-admin
+  3.19.12) purely so `ReferenceManyField` has the context it expects, with no actual backing resource behind it.
+- **Confirmed design call:** per the original scoping's "Cons," a tag's landing page is a song list + Shuffle +
+  Create Playlist only, no Albums/Top Songs panel - tags are per-song, not per-album, so there's no honest "this
+  album belongs to this tag" the way there is for genre. Confirmed with the user before building rather than
+  guessing.
+- **My Tags' unbounded-cardinality question** (flagged in the original scoping, not resolved here): a heavy
+  personal-tagger could still end up with a large, unpaginated chip grid. Left as-is for this pass since it wasn't
+  actually a live problem in testing - worth revisiting if it becomes one.
+
+**Effort — estimated vs. actual:** Estimated Medium, held up as Medium. The scoping's read on "what's reused vs.
+new" was accurate on the backend and toggle side; the one estimation gap was assuming the frontend could reuse
+Genre's exact component architecture, when in practice it needed a parallel (lighter) architecture instead of a
+literal reuse - more files than a pure copy-paste would have been, but no unexpected backend work.
+
 ---
 
 ## 📋 Planned — scoped, ready to build
@@ -431,66 +468,6 @@ judgment calls that PR #2601's screenshots only partially resolve for this fork'
 **Recommendation:** Worth building as a contained v1 (tracklist display only, no auto-detection or smart-playlist
 criteria) — the data's already there and tested, so this is mostly UI work. Revisit the auto-detect/composer/smart-
 playlist pieces later, independently, if v1 gets real use.
-
----
-
-### AI Tags / My Tags exploration dashboards + view toggles
-
-**Source:** own project, direct follow-up to the AI Tags vs. My Tags source-separation work (see "User-defined
-song tagging" above) — now that AI-written and hand-added tags are structurally distinguished, give each its own
-browsable dashboard the way Genre Exploration already does for embedded genre metadata: a chip index (one chip
-per distinct AI Genre value, one per AI Mood value, one per My Tag), landing on a per-value page with the matching
-songs and a one-click "Create Playlist" action. Also add personal-menu toggles to show/hide each new view
-independently, plus a toggle for the *existing* (currently always-on) standard Genre sidebar entry.
-
-**Status:** Scoped, not started.
-
-**What already exists and can be reused as-is:**
-- **The tag storage and source split** — `media_file_tag`'s `source` column (`ai`/`user`) already separates the
-  three groups this feature needs to browse (AI Genre, AI Mood, My Tags); AI Genre vs. AI Mood is purely a
-  client-side split of `source=ai` tag names by their existing `genre:`/`mood:` prefix convention, no new backend
-  distinction needed.
-- **Per-value song filtering** — `mediaFileUserTagFilter` (`persistence/mediafile_repository.go`) already exposes
-  a `user_tag` filter on the `song` resource, matching by exact tag name regardless of source. A per-tag landing
-  page's song list needs zero new backend code, same as Genre Exploration's Albums/Top Songs panels needed none.
-- **The toggle mechanism** — `ui/src/personal/FolderViewToggle.jsx` is a complete, proven template: a Redux
-  boolean (`state.settings.showFolderView`), a `Switch` component in the Personal settings menu
-  (`ui/src/personal/Personal.jsx`), and a conditional render in `Menu.jsx`. Four new toggles (AI Genre, AI Mood,
-  My Tags, standard Genre) means four small variations on this exact pattern, not new design work.
-- **Playlist creation from a filtered set** — Genre Exploration's "Create Playlist" action already composes
-  `GetRandom` with an arbitrary filter plus `core/matcher.DeduplicateMediaFiles`; swapping `genre_id` for
-  `user_tag` as the filter is a parameter change, not new logic.
-
-**What's actually new:**
-- **A count-aggregation query.** The dashboard's chip index needs "tag name + song count" pairs to render, but
-  unlike Genre (`model.Genre.SongCount`/`AlbumCount` are scanner-maintained columns on a first-class `genre`
-  table), tags have no precomputed rollup — `MediaFileTagRepository.AllTagNames` returns distinct names only, no
-  counts. Needs one new repository method, something like `TagCounts(source string) ([]TagCount, error)` doing
-  `SELECT tag_name, COUNT(DISTINCT media_file_id) ... GROUP BY tag_name` — small, but genuinely new, not reused.
-- **Pulling standard Genre out of the generic resource loop.** Per the Genre Exploration entry above, its sidebar
-  entry currently "flows through `Menu.jsx`'s existing generic resource loop automatically" with no toggle at all
-  — adding one means giving it the same explicit conditional Folders has, which is a small behavior change to an
-  already-shipped, currently-always-on feature. Needs to default the new flag to **on** so existing installs see
-  no change until a user actively hides it.
-
-**Pros:** Three of the four mechanisms this needs (storage/split, per-tag filtering, the toggle pattern) are
-already fully proven and shipped for other features — this is mostly composition, not new design. The count
-query is the only real unknown, and it's a small, well-understood aggregation.
-
-**Cons:** Tags are per-song, not per-album like genre — there's no natural "Albums"/"Top Songs" rollup for a
-per-tag landing page the way Genre's dashboard has both, since a single album can easily have songs with
-different personal tags. A tag's landing page is realistically just a filtered Song list plus Create Playlist,
-a narrower page than Genre's. My Tags specifically has no fixed vocabulary (unlike AI Genre/Mood, which are
-capped at whatever AI Auto-Tagging's configured vocabulary allows, typically a few dozen values) — a heavy
-personal-tagger could end up with a chip index of hundreds of one-off tags, which may need pagination/search the
-other two views don't.
-
-**Recommendation:** Build AI Genre and AI Mood dashboards together first (identical mechanism, just filtered by
-prefix, and bounded by AI Auto-Tagging's vocabulary size) before My Tags, since My Tags' unbounded-cardinality
-problem is a real open design question (pagination? search? a minimum-count threshold to hide one-off tags?) worth
-settling separately rather than blocking the first two views on it. Ship all four toggles as one small follow-up
-pass once the views themselves exist, reusing the Folder toggle pattern exactly — including the default-on
-migration for the standard Genre toggle.
 
 ---
 
