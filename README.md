@@ -225,43 +225,74 @@ For the full history of what's shipped and what's planned, see
 ## User-Defined Song Tagging (Experimental)
 
 Genre, mood, and grouping tags come from your files' embedded metadata — useful, but fixed, and shared across
-everyone on the server. This fork adds a second kind of tag: ones you create yourself, entirely separate from file
-metadata, and private to your own account even when other people share the same library.
+everyone on the server. This fork adds a second kind of tag: ones stored per-user, entirely separate from file
+metadata, and private to your own account even when other people share the same library. There are two distinct
+sources of these tags, kept deliberately separate so they never get mixed up: **My Tags**, which you create by
+hand, and **AI Tags**, which the companion [AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin)
+plugin writes automatically. Both live in the same underlying storage, but each has its own column in the Songs
+list, and only My Tags are editable from the song context menu.
 
 <p align="left">
     <img width="800" src=".github/screenshots/ss-tags-context-menu.png" alt="Song context menu showing the new Tags option, alongside Add to Playlist, Share, and other actions">
 </p>
 
-### 🏷️ Tag anything, however you want
-Apply your own free-form labels to any song from its context menu — "workout," "background music for writing,"
-whatever makes sense to you. A tag doesn't need to be created ahead of time; typing a new name and applying it is
-enough, and it becomes a reusable option for every other song from that point on.
+### 🏷️ My Tags: tag anything, however you want
+Apply your own free-form labels to any song from its context menu ("Edit Tags") — "workout," "background music for
+writing," whatever makes sense to you. A tag doesn't need to be created ahead of time; typing a new name and
+applying it is enough, and it becomes a reusable option for every other song from that point on.
 
 <p align="left">
     <img width="500" src=".github/screenshots/ss-tags-dialog.png" alt="Tags dialog, opened from a song's context menu">
 </p>
 
+**This dialog only shows and edits My Tags — AI Tags never appear here, and can't be toggled on/off per-track from
+this UI.** If a song already has AI-written tags, opening "Edit Tags" on it won't show them; you'll only see (and
+be able to add to) your own hand-added tags. That's intentional, not a bug: AI Tags are meant to be managed
+entirely by the plugin's own classification runs, not spot-edited per song — see the next section.
+
+### 🤖 AI Tags: written automatically by a plugin, not edited by hand
+If you've installed [AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin), it classifies tracks
+by genre/mood/language using an AI provider and writes the results here. These show up in their own **AI Tags**
+column in the Songs list (a separate column from **My Tags** — both are off by default; turn them on via the
+column-visibility menu in the Songs list toolbar). To change *which words* the AI is allowed to use (e.g. add
+"trance" to the genre list, or remove moods you don't care about), edit that plugin's **Genre Vocabulary**/**Mood
+Vocabulary** config fields — not anything in this UI. There is currently no button in this UI to manually add or
+remove an individual AI Tag on a song; that's a deliberate scope boundary, not a missing feature — AI Tags are
+meant to reflect what the classifier actually decided, not be hand-edited afterward. If you disagree with a
+specific AI-assigned tag, the supported path is a **My Tag** of your own alongside it, not editing the AI Tag
+itself.
+
 ### 🔒 Yours alone, even on a shared server
-Tags are scoped entirely to your own account. Two people tagging songs on the same shared library never see each
-other's tags, and there's no admin-managed or global tag list to work around.
+Both kinds of tags are scoped entirely to your own account. Two people tagging songs on the same shared library
+never see each other's tags, and there's no admin-managed or global tag list to work around.
 
 ### 🎯 Filter and bulk-add in one action
-A "My Tag" filter on the song list narrows to everything carrying a given tag, and the "Bind by Tag" button adds
-every matching song to a playlist in one click — no selecting songs one at a time.
+A "Tag" filter on the song list narrows to everything carrying a given tag name (matching either My Tags or AI
+Tags — it's not source-specific), and the "Bind by Tag" button adds every matching song to a playlist in one
+click — no selecting songs one at a time.
 
 ### 🔁 Smart playlists that follow your tags automatically
-Tags are usable as smart-playlist (`.nsp`) criteria, so a playlist can auto-update as you tag or untag songs,
-instead of needing to be rebuilt by hand every time something changes.
+Tags are usable as smart-playlist (`.nsp`) criteria via the `usertag` field, so a playlist can auto-update as tags
+change, instead of needing to be rebuilt by hand every time something does. This criteria field also matches either
+source, same as the filter above — if you specifically want playlists built per AI-discovered genre/mood value
+with per-artist diversity capping (which a `.nsp` smart playlist criteria field alone can't express), see
+[AI Mood Playlists](https://github.com/RFLundgren/AI-Mood-Playlists-Plugin) instead.
 
-### 🤖 A plugin-facing API, not just a UI feature
-The same private tagging system is exposed to plugins through five Subsonic-tier endpoints — `setUserTag.view`/
-`removeUserTag.view` to write and clear tags, `getUserTags.view` to read one song's tags, and `getAllUserTags.view`/
-`getSongsByUserTag.view` to discover every tag value in use and every song carrying a given one, without a plugin
-having to walk the whole library itself. This is what powers two companion projects, both outside this repo:
-[AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin), which classifies tracks by genre/mood/
-language using an AI provider and writes the results as tags, and
-[AI Mood Playlists](https://github.com/RFLundgren/ai-mood-playlists), which builds and maintains a playlist per
-discovered tag value from those classifications.
+### 🔌 A plugin-facing API, with source built in
+The tagging system is exposed to plugins through five Subsonic-tier endpoints. `setUserTag.view` (write),
+`getUserTags.view` (read one song's tags), `getAllUserTags.view` (discover every tag value in use), and
+`getSongsByUserTag.view` (find every song carrying a given value) are **AI-only** — they always write/read
+`source=ai`, so a plugin using this API never sees or accidentally interferes with a person's hand-added tags, and
+a person's My Tags can never make AI Auto-Tagging's "already classified this track" check wrongly skip it.
+`removeUserTag.view` removes by (song, tag name) regardless of source. There's also a native REST API
+(`/mediaFileTag`, used by the "Edit Tags" dialog above) for the human-facing side: its `POST`/`DELETE` always
+write/remove `source=user`, and its `GET` endpoints accept an optional `?source=ai` or `?source=user` query
+parameter to narrow results (omit it to get both, which is what the smart-playlist criteria and list filter do).
+
+This API is what powers two companion projects, both outside this repo:
+[AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin), and
+[AI Mood Playlists](https://github.com/RFLundgren/AI-Mood-Playlists-Plugin), which builds and maintains a playlist
+per discovered AI Tag value from those classifications.
 
 Requested in [navidrome/navidrome discussion #4823](https://github.com/navidrome/navidrome/discussions/4823).
 
