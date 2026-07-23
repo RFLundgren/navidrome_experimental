@@ -15,12 +15,12 @@ it serves this fork's own use (Cirque compatibility, personal library workflow).
 
 ## At a glance
 
-**7 shipped · 4 planned, ready to build · 3 in the backlog (assessed, not prioritized)**
+**8 shipped · 4 planned, ready to build · 3 in the backlog (assessed, not prioritized)**
 
 Nothing below is currently mid-build — everything is either done, or scoped-but-not-started. When something is
 picked up, move it into its own "🔨 In progress" section at the top so it's visible at a glance.
 
-### ✅ Shipped (7)
+### ✅ Shipped (8)
 
 | Feature | Source | Effort (est. → actual) |
 |---|---|---|
@@ -31,6 +31,7 @@ picked up, move it into its own "🔨 In progress" section at the top so it's vi
 | Podcast support (Subsonic API) | own project, [PODCAST_PLAN.md](PODCAST_PLAN.md) | Large → Large |
 | Physical folder browsing | own project, [navidrome-folder-roadmap.md](navidrome-folder-roadmap.md) | Large → Large |
 | Enhanced scrobble attribution (Pulse integration) | own project | Small → Small |
+| AI Tags / My Tags exploration dashboards + view toggles | own project, follow-up to User-defined song tagging | Medium → Medium |
 
 ### 📋 Planned — scoped, ready to build (4)
 
@@ -252,6 +253,43 @@ playback position, a cross-channel "up next" queue, OPML import/export), see [PO
 **Status:** Shipped. `client`/`source`/`origin`/`playback_mode` fields on every scrobble/play report, exposed to
 plugins via the same `ScrobbleRequest`/`NowPlayingRequest` types, for this fork's own Pulse companion project. See
 the [README](README.md#enhanced-scrobble-attribution-pulse-integration) for details.
+
+### AI Tags / My Tags exploration dashboards + view toggles
+
+**Source:** own project, direct follow-up to the AI Tags vs. My Tags source-separation work (see "User-defined
+song tagging" above) — three chip-index dashboards (AI Genre, AI Mood, My Tags) in the same visual style as Genre
+Exploration, plus personal-menu toggles to show/hide each independently.
+
+**Status:** Shipped, matching the scoping almost exactly (see below for the one confirmed design call).
+
+- **Reused as scoped, with zero surprises:** the `source` column split (AI Genre/AI Mood are a client-side
+  `genre:`/`mood:` prefix split of `source=ai`; My Tags is `source=user`), the existing `user_tag` song filter for
+  a per-tag landing page's song list, the Folder toggle pattern (generalized into one `ViewToggle` component + a
+  `SET_VIEW_TOGGLE` action, rather than four near-duplicate dedicated actions/reducer cases), and Genre
+  Exploration's filter-based "Create Playlist" mechanism (`genreRandomSongs` → `tagRandomSongs`, same
+  overfetch/dedup/exclude-skipped approach, filtered by tag name + source instead of `genre_id`).
+- **The one genuinely new backend piece, as predicted:** `MediaFileTagRepository.TagCounts(source)` — a
+  `COUNT(DISTINCT media_file_id) ... GROUP BY tag_name` aggregation, exposed via a new `GET /mediaFileTag/counts`
+  endpoint, plus `GET /mediaFileTag/:tag/randomSongs` for the playlist action.
+- **One thing found only once actually building it, not visible from scoping alone:** replicating Genre
+  Exploration's exact architecture (a full react-admin Resource with `useShowController`/`ReferenceManyField`
+  reading a real backing record) doesn't fit tag values cleanly, since they have no DB table/id the way genre
+  does. Built as lighter custom pages instead — a plain fetch for the chip index, a React Router route (not a
+  Resource route) for the per-tag page, wrapped in a bare `RecordContextProvider` (a react-admin/ra-core primitive
+  that pre-dates the officially-documented v4-only feature, confirmed present in this app's installed react-admin
+  3.19.12) purely so `ReferenceManyField` has the context it expects, with no actual backing resource behind it.
+- **Confirmed design call:** per the original scoping's "Cons," a tag's landing page is a song list + Shuffle +
+  Create Playlist only, no Albums/Top Songs panel - tags are per-song, not per-album, so there's no honest "this
+  album belongs to this tag" the way there is for genre. Confirmed with the user before building rather than
+  guessing.
+- **My Tags' unbounded-cardinality question** (flagged in the original scoping, not resolved here): a heavy
+  personal-tagger could still end up with a large, unpaginated chip grid. Left as-is for this pass since it wasn't
+  actually a live problem in testing - worth revisiting if it becomes one.
+
+**Effort — estimated vs. actual:** Estimated Medium, held up as Medium. The scoping's read on "what's reused vs.
+new" was accurate on the backend and toggle side; the one estimation gap was assuming the frontend could reuse
+Genre's exact component architecture, when in practice it needed a parallel (lighter) architecture instead of a
+literal reuse - more files than a pure copy-paste would have been, but no unexpected backend work.
 
 ---
 
