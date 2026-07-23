@@ -296,19 +296,10 @@ write/remove `source=user`, and its `GET` endpoints accept an optional `?source=
 parameter to narrow results (omit it to get both, which is what the smart-playlist criteria and list filter do).
 
 This API is what powers two companion projects, both outside this repo:
-[AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin), and
-[AI Mood Playlists](https://github.com/RFLundgren/AI-Mood-Playlists-Plugin), which builds and maintains a playlist
-per discovered AI Tag value from those classifications.
-
-### 🤖 A plugin-facing API, not just a UI feature
-The same private tagging system is exposed to plugins through five Subsonic-tier endpoints — `setUserTag.view`/
-`removeUserTag.view` to write and clear tags, `getUserTags.view` to read one song's tags, and `getAllUserTags.view`/
-`getSongsByUserTag.view` to discover every tag value in use and every song carrying a given one, without a plugin
-having to walk the whole library itself. This is what powers two companion projects, both outside this repo:
 [AI Auto-Tagging](https://github.com/RFLundgren/AI-auto-tagging-plugin), which classifies tracks by genre/mood/
 language using an AI provider and writes the results as tags, and
-[AI Mood Playlists](https://github.com/RFLundgren/ai-mood-playlists), which builds and maintains a playlist per
-discovered tag value from those classifications.
+[AI Mood Playlists](https://github.com/RFLundgren/AI-Mood-Playlists-Plugin), which builds and maintains a playlist
+per discovered AI Tag value from those classifications.
 
 Requested in [navidrome/navidrome discussion #4823](https://github.com/navidrome/navidrome/discussions/4823).
 
@@ -317,6 +308,10 @@ Requested in [navidrome/navidrome discussion #4823](https://github.com/navidrome
 Three new sidebar entries — **AI Genre**, **AI Mood**, and **My Tags** — each a chip-grid dashboard in the same
 visual style as the existing Genre Exploration page, but built from your tags instead of embedded file metadata.
 Click a chip to land on that value's own page: every song carrying it, plus a "Create Playlist" action.
+
+<p align="left">
+    <img width="800" src=".github/screenshots/ss-ai-genre-dashboard.png" alt="AI Genre dashboard, showing a grid of chips built from AI Auto-Tagging's genre: tags">
+</p>
 
 ### 🏷️ Three separate views, split by tag source and category
 AI Auto-Tagging's `genre:`/`mood:` tags and a person's own hand-added tags are already kept apart at the storage
@@ -329,11 +324,24 @@ such split since personal tags aren't categorized.
 Unlike Genre's page (which also shows Albums, since genre is a per-album concept), a tag's landing page is just
 the matching songs plus **Shuffle** and **Create Playlist** — tags are per-song, so an album can easily have some
 songs carrying a tag and others not, and there's no honest "this album belongs to this tag" the way there is for
-genre.
+genre. Create Playlist here has the exact same **exclude skipped**/**exclude duplicates**/**max tracks per artist**
+options as Genre's own dialog (see [Genre Exploration](#genre-exploration-experimental) below).
+
+### 📄 Paginated and searchable, same as Genre's song lists
+The song list on a tag's page has real pagination and its own artist/song search box too — the same fix applied to
+Genre's Top Songs/Recently Added sections below.
+
+<p align="left">
+    <img width="800" src=".github/screenshots/ss-tag-dashboard-songlist.png" alt="A tag's landing page, showing the song list with pagination controls and the search box">
+</p>
 
 ### 🔘 Each one toggleable independently, including the standard Genre view
 All three new dashboards, plus the pre-existing standard Genre view, now have their own show/hide switch under
 Settings → Personal. All four default to visible — existing users see no change unless they actively hide one.
+
+<p align="left">
+    <img width="800" src=".github/screenshots/ss-personal-view-toggles.png" alt="Personal settings, showing the Show Genre View, Show AI Genre View, Show AI Mood View, and Show My Tags View toggles">
+</p>
 
 ## On-Demand Plugin Actions (Experimental)
 
@@ -419,9 +427,25 @@ tracks, and a shuffle action, all scoped to that genre automatically.
 
 ### 🔀 Shuffle or create a playlist, right from the genre page
 Shuffle queues a large randomized set of the genre's songs. "Create Playlist" goes further — pick how many tracks
-you want, and it builds a real playlist for you, deduplicated so a song that appears on both the studio album and
-a "Best Of" compilation only shows up once (matching by MusicBrainz Recording ID, then ISRC, then title/artist/
-duration similarity for files with neither), with an option to skip anything you've already flagged as skipped.
+you want, with three more knobs to shape the result:
+
+- **Exclude skipped songs** — leaves out anything you've flagged as skipped (see
+  [Skip / Auto-Pass Disliked Songs](#skip--auto-pass-disliked-songs-experimental) below).
+- **Exclude duplicate versions of the same song** (on by default) — collapses a song that appears on both the
+  studio album and a "Best Of" compilation down to one copy, matching by MusicBrainz Recording ID, then ISRC, then
+  title/artist/duration similarity for files with neither. Turn it off if you'd rather let a live version and a
+  studio version of the same song both appear.
+- **Max tracks per artist** (optional, blank = unlimited) — caps how many songs from any one artist can land in the
+  generated playlist, so a prolific artist doesn't dominate a random selection.
+
+<p align="left">
+    <img width="500" src=".github/screenshots/ss-create-playlist-dialog.png" alt="Create Playlist dialog, showing track count, exclude skipped, exclude duplicates, and max tracks per artist">
+</p>
+
+### 📄 Paginated and searchable, not capped at one page
+Both Top Songs and Recently Added show real pagination controls instead of silently cutting off after the first
+page, and each has its own search box scoped to that section — type an artist or song title to narrow it down
+without leaving the genre page.
 
 Requested across [navidrome/navidrome discussion #2631](https://github.com/navidrome/navidrome/discussions/2631),
 [#4249](https://github.com/navidrome/navidrome/discussions/4249), and
