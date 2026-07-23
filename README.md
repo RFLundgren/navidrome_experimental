@@ -22,28 +22,36 @@ organizing music by hand and doesn't want that structure hidden behind a metadat
 Everything else works exactly like upstream Navidrome — same installation, same configuration, same Subsonic
 compatibility, same plugin system. This fork just adds:
 
-- 🎙️ **[Podcast support](PODCAST_PLAN.md)** — full RSS subscriptions, streamed or downloaded, through the real
-  Subsonic API. See [below](#podcast-support-experimental) for the full feature list.
-- 📁 **[Physical folder browsing](navidrome-folder-roadmap.md)** — navigate, play, and manage your library exactly
-  as it's laid out on disk. See [below](#physical-folder-browsing-experimental) for the full feature list.
-- 🏷️ **User-defined song tagging** — private per-user labels on songs, independent of file metadata, with
-  tag-based filtering, bulk playlist add, smart-playlist criteria support, and a plugin-facing API powering an
-  AI auto-tagging + auto-playlist ecosystem. See [below](#user-defined-song-tagging-experimental) for details.
-- 🏷️ **AI Genre / AI Mood / My Tags dashboards** — three chip-grid browsing pages built from your tags, each
-  independently toggleable from Settings → Personal. See [below](#ai-genre--ai-mood--my-tags-dashboards-experimental)
-  for details.
-- 🔘 **On-demand plugin actions** — a "Test Connection"-style button any plugin can add to its own config page,
-  for things that need a one-off run rather than a schedule (e.g. validating an AI provider's API key before a
-  real scan). See [below](#on-demand-plugin-actions-experimental) for details.
-- ⏭️ **Skip / auto-pass disliked songs** — flag a song as skipped and the player automatically passes over it during
-  playback, without deleting it. See [below](#skip--auto-pass-disliked-songs-experimental) for details.
-- 📡 **Enhanced scrobble attribution** — richer client/source/playback-mode context on every scrobble, available to
-  plugins too. See [below](#enhanced-scrobble-attribution-pulse-integration) for details.
-- 🎼 **Genre exploration** — a real sidebar entry for browsing by genre, with a colored dashboard, albums, top
-  songs, and one-click deduplicated playlist creation. See [below](#genre-exploration-experimental) for details.
-- 🔗 **Genre merging** — collapse near-duplicate genres from inconsistent tagging into one, applied at scan time so
-  every Subsonic client and smart playlist sees the merge too, not just this web UI. See
+- 🎙️ **[Podcast support](PODCAST_PLAN.md)** *(stable & develop)* — full RSS subscriptions, streamed or downloaded,
+  through the real Subsonic API. See [below](#podcast-support-experimental) for the full feature list.
+- 📁 **[Physical folder browsing](navidrome-folder-roadmap.md)** *(stable & develop)* — navigate, play, and manage
+  your library exactly as it's laid out on disk. See [below](#physical-folder-browsing-experimental) for the full
+  feature list.
+- 📡 **Enhanced scrobble attribution** *(stable & develop)* — richer client/source/playback-mode context on every
+  scrobble, available to plugins too. See [below](#enhanced-scrobble-attribution-pulse-integration) for details.
+- 🏷️ **User-defined song tagging** *(develop only)* — private per-user labels on songs, independent of file
+  metadata, with tag-based filtering, bulk playlist add, smart-playlist criteria support, and a plugin-facing API
+  powering an AI auto-tagging + auto-playlist ecosystem. See [below](#user-defined-song-tagging-experimental) for
+  details.
+- 🏷️ **AI Genre / AI Mood / My Tags dashboards** *(develop only)* — three chip-grid browsing pages built from your
+  tags, each independently toggleable from Settings → Personal. See
+  [below](#ai-genre--ai-mood--my-tags-dashboards-experimental) for details.
+- 🔘 **On-demand plugin actions** *(develop only)* — a "Test Connection"-style button any plugin can add to its own
+  config page, for things that need a one-off run rather than a schedule (e.g. validating an AI provider's API key
+  before a real scan). See [below](#on-demand-plugin-actions-experimental) for details.
+- ⏭️ **Skip / auto-pass disliked songs** *(develop only)* — flag a song as skipped and the player automatically
+  passes over it during playback, without deleting it. See
+  [below](#skip--auto-pass-disliked-songs-experimental) for details.
+- 🎼 **Genre exploration** *(develop only)* — a real sidebar entry for browsing by genre, with a colored dashboard,
+  albums, top songs, and one-click deduplicated playlist creation. See
+  [below](#genre-exploration-experimental) for details.
+- 🔗 **Genre merging** *(develop only)* — collapse near-duplicate genres from inconsistent tagging into one, applied
+  at scan time so every Subsonic client and smart playlist sees the merge too, not just this web UI. See
   [below](#genre-merging-experimental) for details.
+
+*(develop only)* features haven't reached a tagged `:stable` checkpoint yet — see
+[Getting navidrome-experimental](#getting-navidrome-experimental) below for what the two tags mean. They'll move to
+*(stable & develop)* the next time a release is cut.
 
 Kept in sync with upstream: currently based on [Navidrome v0.63.2](https://github.com/navidrome/navidrome/releases/tag/v0.63.2),
 merged in directly rather than maintained as a standalone patch set. Syncs happen periodically, not on a fixed
