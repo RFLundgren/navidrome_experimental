@@ -1,0 +1,28 @@
+version: v1-draft
+exports:
+    nd_on_action:
+        description: |-
+            OnAction is called when a user triggers a named action from the
+            plugin's config page. The returned string is a short, human-readable
+            result shown directly to the user in the UI (not logged) - e.g.
+            "OK - test classification succeeded". Return an error for expected
+            failures (e.g. an invalid API key); the error message is what gets
+            displayed, so make it actionable.
+        input:
+            $ref: '#/components/schemas/ActionRequest'
+            contentType: application/json
+        output:
+            type: string
+            contentType: application/json
+components:
+    schemas:
+        ActionRequest:
+            description: ActionRequest identifies which declared action the user triggered.
+            properties:
+                name:
+                    type: string
+                    description: |-
+                        Name is the action's name, matching one declared in manifest.json's
+                        "actions" array.
+            required:
+                - name

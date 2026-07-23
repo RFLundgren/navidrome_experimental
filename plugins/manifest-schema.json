@@ -39,9 +39,38 @@
     },
     "config": {
       "$ref": "#/$defs/ConfigDefinition"
+    },
+    "actions": {
+      "type": "array",
+      "description": "On-demand actions the plugin supports (e.g. a 'Test Connection' button on its config page), each triggered by a user from the admin UI rather than on a schedule or queue. Requires the plugin to export the action capability's nd_on_action function.",
+      "items": {
+        "$ref": "#/$defs/Action"
+      }
     }
   },
   "$defs": {
+    "Action": {
+      "type": "object",
+      "description": "A single on-demand action the plugin supports",
+      "additionalProperties": false,
+      "required": ["name", "label"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique identifier passed to the plugin's OnAction handler so it knows which action was triggered",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "description": "Button text shown in the admin UI",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional help text shown alongside the button"
+        }
+      }
+    },
     "ConfigDefinition": {
       "type": "object",
       "description": "Configuration schema for the plugin using JSON Schema (draft-07) and optional JSONForms UI Schema",

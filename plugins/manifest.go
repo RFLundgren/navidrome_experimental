@@ -74,6 +74,16 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
+	// Action names must be unique - they're the dispatch key the plugin uses
+	// to tell declared actions apart in its OnAction handler.
+	seenActionNames := make(map[string]bool, len(m.Actions))
+	for _, a := range m.Actions {
+		if seenActionNames[a.Name] {
+			return fmt.Errorf("duplicate action name %q in 'actions'", a.Name)
+		}
+		seenActionNames[a.Name] = true
+	}
+
 	return nil
 }
 
@@ -111,6 +121,13 @@ func ValidateWithCapabilities(m *Manifest, capabilities []Capability) error {
 	if m.Permissions != nil && m.Permissions.Taskqueue != nil {
 		if !hasCapability(capabilities, CapabilityTaskWorker) {
 			return fmt.Errorf("'taskqueue' permission requires plugin to export '%s' function", FuncTaskWorkerCallback)
+		}
+	}
+
+	// Declaring any manifest actions requires the Action capability
+	if len(m.Actions) > 0 {
+		if !hasCapability(capabilities, CapabilityAction) {
+			return fmt.Errorf("declaring 'actions' requires plugin to export '%s' function", FuncOnAction)
 		}
 	}
 

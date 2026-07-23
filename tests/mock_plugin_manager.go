@@ -5,7 +5,7 @@ import (
 )
 
 // MockPluginManager is a mock implementation of plugins.PluginManager for testing.
-// It implements EnablePlugin, DisablePlugin, UpdatePluginConfig, ValidatePluginConfig, UpdatePluginUsers, UpdatePluginLibraries and RescanPlugins methods.
+// It implements EnablePlugin, DisablePlugin, UpdatePluginConfig, ValidatePluginConfig, UpdatePluginUsers, UpdatePluginLibraries, RescanPlugins and TriggerPluginAction methods.
 type MockPluginManager struct {
 	// EnablePluginFn is called when EnablePlugin is invoked. If nil, returns EnableError.
 	EnablePluginFn func(ctx context.Context, id string) error
@@ -21,15 +21,19 @@ type MockPluginManager struct {
 	UpdatePluginLibrariesFn func(ctx context.Context, id, librariesJSON string, allLibraries, allowWriteAccess bool) error
 	// RescanPluginsFn is called when RescanPlugins is invoked. If nil, returns RescanError.
 	RescanPluginsFn func(ctx context.Context) error
+	// TriggerPluginActionFn is called when TriggerPluginAction is invoked. If nil, returns TriggerActionResult/TriggerActionError.
+	TriggerPluginActionFn func(ctx context.Context, id, actionName string) (string, error)
 
 	// Default errors to return when Fn callbacks are not set
-	EnableError    error
-	DisableError   error
-	ConfigError    error
-	ValidateError  error
-	UsersError     error
-	LibrariesError error
-	RescanError    error
+	EnableError         error
+	DisableError        error
+	ConfigError         error
+	ValidateError       error
+	UsersError          error
+	LibrariesError      error
+	RescanError         error
+	TriggerActionResult string
+	TriggerActionError  error
 
 	// Track calls for assertions
 	EnablePluginCalls       []string
@@ -53,7 +57,11 @@ type MockPluginManager struct {
 		AllLibraries     bool
 		AllowWriteAccess bool
 	}
-	RescanPluginsCalls int
+	RescanPluginsCalls       int
+	TriggerPluginActionCalls []struct {
+		ID         string
+		ActionName string
+	}
 }
 
 func (m *MockPluginManager) EnablePlugin(ctx context.Context, id string) error {
@@ -129,4 +137,15 @@ func (m *MockPluginManager) RescanPlugins(ctx context.Context) error {
 
 func (m *MockPluginManager) UnloadDisabledPlugins(ctx context.Context) {
 	// No-op for mock - plugins are not actually loaded in tests
+}
+
+func (m *MockPluginManager) TriggerPluginAction(ctx context.Context, id, actionName string) (string, error) {
+	m.TriggerPluginActionCalls = append(m.TriggerPluginActionCalls, struct {
+		ID         string
+		ActionName string
+	}{ID: id, ActionName: actionName})
+	if m.TriggerPluginActionFn != nil {
+		return m.TriggerPluginActionFn(ctx, id, actionName)
+	}
+	return m.TriggerActionResult, m.TriggerActionError
 }

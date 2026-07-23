@@ -33,6 +33,7 @@ type PluginManager interface {
 	UpdatePluginLibraries(ctx context.Context, id, librariesJSON string, allLibraries, allowWriteAccess bool) error
 	RescanPlugins(ctx context.Context) error
 	UnloadDisabledPlugins(ctx context.Context)
+	TriggerPluginAction(ctx context.Context, pluginID, actionName string) (string, error)
 }
 
 type Router struct {
