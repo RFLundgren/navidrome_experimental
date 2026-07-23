@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	. "github.com/Masterminds/squirrel"
 	"github.com/deluan/rest"
 	"github.com/go-chi/chi/v5"
-	"github.com/navidrome/navidrome/core/matcher"
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/model/request"
 	"github.com/navidrome/navidrome/persistence"
@@ -118,9 +116,9 @@ func tagSourceFilter(ctx context.Context, tagName, source string) Sqlizer {
 }
 
 // tagRandomSongs mirrors genreRandomSongs (see genre.go) for the "Create
-// Playlist" action on the AI Tags / My Tags dashboards - same overfetch +
-// dedup + optional skip-exclusion approach, filtered by tag name/source
-// instead of genre ID.
+// Playlist" action on the AI Tags / My Tags dashboards - same
+// randomPlaylistOptions handling, filtered by tag name/source instead of
+// genre ID.
 func (api *Router) tagRandomSongs() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tagName := chi.URLParam(r, "tag")
@@ -130,45 +128,19 @@ func (api *Router) tagRandomSongs() http.HandlerFunc {
 		}
 		source := r.URL.Query().Get("source")
 
-		count := defaultGenrePlaylistTrackCount
-		if c, err := strconv.Atoi(r.URL.Query().Get("count")); err == nil && c > 0 {
-			count = c
-		}
-		if count > maxGenrePlaylistTrackCount {
-			count = maxGenrePlaylistTrackCount
-		}
-		excludeSkipped := r.URL.Query().Get("excludeSkipped") == "true"
+		opts := parseRandomPlaylistOptions(r)
 
 		ctx := r.Context()
 		candidates, err := api.ds.MediaFile(ctx).GetRandom(model.QueryOptions{
 			Filters: And{tagSourceFilter(ctx, tagName, source), Eq{"missing": false}},
-			Max:     count * genrePlaylistOverfetchFactor,
+			Max:     opts.count * genrePlaylistOverfetchFactor,
 		})
 		if err != nil {
 			_ = rest.RespondWithError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		if excludeSkipped {
-			filtered := candidates[:0]
-			for _, mf := range candidates {
-				if !mf.Skipped {
-					filtered = append(filtered, mf)
-				}
-			}
-			candidates = filtered
-		}
-
-		deduped := matcher.DeduplicateMediaFiles(candidates)
-		if len(deduped) > count {
-			deduped = deduped[:count]
-		}
-
-		ids := make([]string, len(deduped))
-		for i, mf := range deduped {
-			ids[i] = mf.ID
-		}
-		_ = rest.RespondWithJSON(w, http.StatusOK, ids)
+		_ = rest.RespondWithJSON(w, http.StatusOK, buildRandomPlaylist(candidates, opts))
 	}
 }
 

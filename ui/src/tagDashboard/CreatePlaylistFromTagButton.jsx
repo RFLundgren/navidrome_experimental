@@ -34,6 +34,8 @@ export const CreatePlaylistFromTagButton = ({
   const [open, setOpen] = useState(false)
   const [trackCount, setTrackCount] = useState(DEFAULT_TRACK_COUNT)
   const [excludeSkipped, setExcludeSkipped] = useState(true)
+  const [excludeDuplicates, setExcludeDuplicates] = useState(true)
+  const [maxPerArtist, setMaxPerArtist] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleClose = () => setOpen(false)
@@ -43,8 +45,12 @@ export const CreatePlaylistFromTagButton = ({
     const params = new URLSearchParams({
       count: trackCount || DEFAULT_TRACK_COUNT,
       excludeSkipped: excludeSkipped ? 'true' : 'false',
+      excludeDuplicates: excludeDuplicates ? 'true' : 'false',
       source,
     })
+    if (maxPerArtist) {
+      params.set('maxPerArtist', maxPerArtist)
+    }
     httpClient(
       `${REST_URL}/mediaFileTag/${encodeURIComponent(tagName)}/randomSongs?${params}`,
     )
@@ -95,6 +101,26 @@ export const CreatePlaylistFromTagButton = ({
               />
             }
             label={translate('resources.genre.createPlaylist.excludeSkipped')}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={excludeDuplicates}
+                onChange={(e) => setExcludeDuplicates(e.target.checked)}
+              />
+            }
+            label={translate(
+              'resources.genre.createPlaylist.excludeDuplicates',
+            )}
+          />
+          <TextField
+            type="number"
+            fullWidth
+            margin="normal"
+            label={translate('resources.genre.createPlaylist.maxPerArtist')}
+            value={maxPerArtist}
+            onChange={(e) => setMaxPerArtist(e.target.value)}
+            inputProps={{ min: 1 }}
           />
         </DialogContent>
         <DialogActions>
