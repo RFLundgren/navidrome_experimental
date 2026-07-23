@@ -29,6 +29,9 @@ compatibility, same plugin system. This fork just adds:
 - 🏷️ **User-defined song tagging** — private per-user labels on songs, independent of file metadata, with
   tag-based filtering, bulk playlist add, smart-playlist criteria support, and a plugin-facing API powering an
   AI auto-tagging + auto-playlist ecosystem. See [below](#user-defined-song-tagging-experimental) for details.
+- 🏷️ **AI Genre / AI Mood / My Tags dashboards** — three chip-grid browsing pages built from your tags, each
+  independently toggleable from Settings → Personal. See [below](#ai-genre--ai-mood--my-tags-dashboards-experimental)
+  for details.
 - 🔘 **On-demand plugin actions** — a "Test Connection"-style button any plugin can add to its own config page,
   for things that need a one-off run rather than a schedule (e.g. validating an AI provider's API key before a
   real scan). See [below](#on-demand-plugin-actions-experimental) for details.
@@ -308,6 +311,29 @@ language using an AI provider and writes the results as tags, and
 discovered tag value from those classifications.
 
 Requested in [navidrome/navidrome discussion #4823](https://github.com/navidrome/navidrome/discussions/4823).
+
+## AI Genre / AI Mood / My Tags Dashboards (Experimental)
+
+Three new sidebar entries — **AI Genre**, **AI Mood**, and **My Tags** — each a chip-grid dashboard in the same
+visual style as the existing Genre Exploration page, but built from your tags instead of embedded file metadata.
+Click a chip to land on that value's own page: every song carrying it, plus a "Create Playlist" action.
+
+### 🏷️ Three separate views, split by tag source and category
+AI Auto-Tagging's `genre:`/`mood:` tags and a person's own hand-added tags are already kept apart at the storage
+level (see **AI Tags vs. My Tags** above) — these dashboards just give each its own browsable page instead of only
+being visible as a column in the Songs list. AI Genre and AI Mood split AI Auto-Tagging's combined tag namespace
+by its `genre:`/`mood:` prefix into two separate chip grids; My Tags shows whatever personal tags exist, with no
+such split since personal tags aren't categorized.
+
+### 🎯 A song list and a playlist action, not a full genre-style layout
+Unlike Genre's page (which also shows Albums, since genre is a per-album concept), a tag's landing page is just
+the matching songs plus **Shuffle** and **Create Playlist** — tags are per-song, so an album can easily have some
+songs carrying a tag and others not, and there's no honest "this album belongs to this tag" the way there is for
+genre.
+
+### 🔘 Each one toggleable independently, including the standard Genre view
+All three new dashboards, plus the pre-existing standard Genre view, now have their own show/hide switch under
+Settings → Personal. All four default to visible — existing users see no change unless they actively hide one.
 
 ## On-Demand Plugin Actions (Experimental)
 

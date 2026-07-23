@@ -4,12 +4,20 @@ import {
   SET_TOGGLEABLE_FIELDS,
   SET_SHOW_FOLDER_VIEW,
   SET_SHOW_PODCASTS,
+  SET_VIEW_TOGGLE,
 } from '../actions'
 
 const initialState = {
   notifications: false,
   showFolderView: true,
   showPodcasts: true,
+  // Default on, same as Folders/Podcasts - these are opt-out, not opt-in, so
+  // the new dashboards are actually discoverable rather than invisible until
+  // someone happens to find the Personal settings page.
+  showGenreView: true,
+  showAiGenreView: true,
+  showAiMoodView: true,
+  showMyTagsView: true,
   toggleableFields: {},
   omittedFields: {},
 }
@@ -29,6 +37,15 @@ export const settingsReducer = (previousState = initialState, payload) => {
       showPodcasts: true,
     }
   }
+  if (previousState && previousState.showGenreView === undefined) {
+    previousState = {
+      ...previousState,
+      showGenreView: true,
+      showAiGenreView: true,
+      showAiMoodView: true,
+      showMyTagsView: true,
+    }
+  }
 
   switch (type) {
     case SET_NOTIFICATIONS_STATE:
@@ -45,6 +62,11 @@ export const settingsReducer = (previousState = initialState, payload) => {
       return {
         ...previousState,
         showPodcasts: data,
+      }
+    case SET_VIEW_TOGGLE:
+      return {
+        ...previousState,
+        [data.key]: data.value,
       }
     case SET_TOGGLEABLE_FIELDS:
       return {

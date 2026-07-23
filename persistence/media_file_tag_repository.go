@@ -89,4 +89,17 @@ func (r *mediaFileTagRepository) SongIDsForTag(tagName, source string) ([]string
 	return res, err
 }
 
+func (r *mediaFileTagRepository) TagCounts(source string) ([]model.TagCount, error) {
+	userID := loggedUser(r.ctx).ID
+	cond := bySourceIfSet(And{Eq{"user_id": userID}}, source)
+	sel := r.newSelect().
+		Columns("tag_name", "count(distinct media_file_id) as count").
+		Where(cond).
+		GroupBy("tag_name").
+		OrderBy("tag_name")
+	var res []model.TagCount
+	err := r.queryAll(sel, &res)
+	return res, err
+}
+
 var _ model.MediaFileTagRepository = (*mediaFileTagRepository)(nil)

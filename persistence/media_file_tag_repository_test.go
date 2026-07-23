@@ -121,6 +121,50 @@ var _ = Describe("MediaFileTagRepository", func() {
 		})
 	})
 
+	Describe("TagCounts", func() {
+		BeforeEach(func() {
+			Expect(repo.TagSong(songDayInALife.ID, "genre:rock", model.MediaFileTagSourceAI)).To(Succeed())
+			Expect(repo.TagSong(songComeTogether.ID, "genre:rock", model.MediaFileTagSourceAI)).To(Succeed())
+			Expect(repo.TagSong(songDayInALife.ID, "my-favorite", model.MediaFileTagSourceUser)).To(Succeed())
+		})
+
+		It("counts distinct songs per tag name, filtered by source", func() {
+			counts, err := repo.TagCounts(model.MediaFileTagSourceAI)
+			Expect(err).To(BeNil())
+
+			byName := map[string]int{}
+			for _, c := range counts {
+				byName[c.TagName] = c.Count
+			}
+			Expect(byName["genre:rock"]).To(Equal(2))
+			Expect(byName).ToNot(HaveKey("my-favorite"))
+		})
+
+		It("returns counts for the other source independently", func() {
+			counts, err := repo.TagCounts(model.MediaFileTagSourceUser)
+			Expect(err).To(BeNil())
+
+			byName := map[string]int{}
+			for _, c := range counts {
+				byName[c.TagName] = c.Count
+			}
+			Expect(byName["my-favorite"]).To(Equal(1))
+			Expect(byName).ToNot(HaveKey("genre:rock"))
+		})
+
+		It("counts across any source when source is empty", func() {
+			counts, err := repo.TagCounts("")
+			Expect(err).To(BeNil())
+
+			byName := map[string]int{}
+			for _, c := range counts {
+				byName[c.TagName] = c.Count
+			}
+			Expect(byName["genre:rock"]).To(Equal(2))
+			Expect(byName["my-favorite"]).To(Equal(1))
+		})
+	})
+
 	Describe("UntagSong", func() {
 		It("removes the tag regardless of source", func() {
 			Expect(repo.TagSong(songDayInALife.ID, "my-favorite", model.MediaFileTagSourceUser)).To(Succeed())

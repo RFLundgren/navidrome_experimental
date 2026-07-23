@@ -18,14 +18,23 @@ type MediaFileTag struct {
 	CreatedAt   time.Time `structs:"created_at"    json:"createdAt"`
 }
 
+// TagCount is a distinct tag value paired with how many songs carry it, used
+// by the AI Tags / My Tags dashboards to render a chip index without the
+// dashboard needing a separate call per tag value just to get a count.
+type TagCount struct {
+	TagName string `db:"tag_name" json:"tagName"`
+	Count   int    `db:"count"    json:"count"`
+}
+
 // MediaFileTagRepository stores per-user tags on media files. Every tag has
 // a source (MediaFileTagSourceAI or MediaFileTagSourceUser) recording who/
-// what wrote it. TagsForSong, AllTagNames, and SongIDsForTag take a source
-// filter; pass "" to match tags of any source.
+// what wrote it. TagsForSong, AllTagNames, SongIDsForTag, and TagCounts take
+// a source filter; pass "" to match tags of any source.
 type MediaFileTagRepository interface {
 	TagSong(mediaFileID, tagName, source string) error
 	UntagSong(mediaFileID, tagName string) error
 	TagsForSong(mediaFileID, source string) ([]string, error)
 	AllTagNames(source string) ([]string, error)
 	SongIDsForTag(tagName, source string) ([]string, error)
+	TagCounts(source string) ([]TagCount, error)
 }

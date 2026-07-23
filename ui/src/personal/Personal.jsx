@@ -7,6 +7,7 @@ import { SelectDefaultView } from './SelectDefaultView'
 import { NotificationsToggle } from './NotificationsToggle'
 import { FolderViewToggle } from './FolderViewToggle'
 import { PodcastsToggle } from './PodcastsToggle'
+import { ViewToggle } from './ViewToggle'
 import { LastfmScrobbleToggle } from './LastfmScrobbleToggle'
 import { ListenBrainzScrobbleToggle } from './ListenBrainzScrobbleToggle'
 import config from '../config'
@@ -31,6 +32,22 @@ const Personal = () => {
         <NotificationsToggle />
         <FolderViewToggle />
         <PodcastsToggle />
+        <ViewToggle
+          settingsKey="showGenreView"
+          labelKey="menu.personal.options.showGenreView"
+        />
+        <ViewToggle
+          settingsKey="showAiGenreView"
+          labelKey="menu.personal.options.showAiGenreView"
+        />
+        <ViewToggle
+          settingsKey="showAiMoodView"
+          labelKey="menu.personal.options.showAiMoodView"
+        />
+        <ViewToggle
+          settingsKey="showMyTagsView"
+          labelKey="menu.personal.options.showMyTagsView"
+        />
         {config.lastFMEnabled && <LastfmScrobbleToggle />}
         {config.listenBrainzEnabled && <ListenBrainzScrobbleToggle />}
       </SimpleForm>
