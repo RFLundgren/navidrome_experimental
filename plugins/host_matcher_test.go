@@ -383,12 +383,13 @@ var _ = Describe("MatcherService Integration", Ordered, func() {
 		mockPluginRepo.Permitted = true
 		// AllLibraries: the matcher requires a library scope.
 		mockPluginRepo.SetData(model.Plugins{{
-			ID:           "test-matcher",
-			Path:         destPath,
-			SHA256:       hashHex,
-			Enabled:      true,
-			AllUsers:     true,
-			AllLibraries: true,
+			ID:                    "test-matcher",
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
+			AllUsers:              true,
+			AllLibraries:          true,
 		}})
 
 		mediaFileRepo := tests.CreateMockMediaFileRepo()

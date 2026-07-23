@@ -82,11 +82,12 @@ var _ = Describe("SubsonicAPI Host Function", Ordered, func() {
 		mockPluginRepo := dataStore.Plugin(GinkgoT().Context()).(*tests.MockPluginRepo)
 		mockPluginRepo.Permitted = true
 		enabledPlugin := model.Plugin{
-			ID:       "test-subsonicapi-plugin",
-			Path:     pluginPath,
-			SHA256:   hashHex,
-			Enabled:  true,
-			AllUsers: true, // Allow all users for test plugin
+			ID:                    "test-subsonicapi-plugin",
+			Path:                  pluginPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
+			AllUsers:              true, // Allow all users for test plugin
 		}
 		mockPluginRepo.SetData(model.Plugins{enabledPlugin})
 

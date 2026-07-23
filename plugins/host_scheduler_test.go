@@ -66,10 +66,11 @@ var _ = Describe("SchedulerService", Ordered, func() {
 		mockPluginRepo := tests.CreateMockPluginRepo()
 		mockPluginRepo.Permitted = true
 		mockPluginRepo.SetData(model.Plugins{{
-			ID:      "test-scheduler",
-			Path:    destPath,
-			SHA256:  hashHex,
-			Enabled: true,
+			ID:                    "test-scheduler",
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
 		}})
 		dataStore := &tests.MockDataStore{MockedPlugin: mockPluginRepo}
 

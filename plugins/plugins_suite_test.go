@@ -114,12 +114,13 @@ func createTestManagerWithPluginsAndMetrics(pluginConfig map[string]map[string]s
 		}
 
 		enabledPlugins = append(enabledPlugins, model.Plugin{
-			ID:       pluginName,
-			Path:     destPath,
-			SHA256:   hashHex,
-			Enabled:  true,
-			Config:   configJSON,
-			AllUsers: true, // Allow all users by default in tests
+			ID:                    pluginName,
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
+			Config:                configJSON,
+			AllUsers:              true, // Allow all users by default in tests
 		})
 	}
 

@@ -710,10 +710,11 @@ var _ = Describe("KVStoreService Integration", Ordered, func() {
 		mockPluginRepo := tests.CreateMockPluginRepo()
 		mockPluginRepo.Permitted = true
 		mockPluginRepo.SetData(model.Plugins{{
-			ID:      "test-kvstore",
-			Path:    destPath,
-			SHA256:  hashHex,
-			Enabled: true,
+			ID:                    "test-kvstore",
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
 		}})
 		dataStore := &tests.MockDataStore{MockedPlugin: mockPluginRepo}
 

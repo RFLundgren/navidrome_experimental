@@ -64,12 +64,13 @@ func setupTestConfigPlugin(configJSON string) (*Manager, func(context.Context, t
 	mockPluginRepo := tests.CreateMockPluginRepo()
 	mockPluginRepo.Permitted = true
 	mockPluginRepo.SetData(model.Plugins{{
-		ID:       "test-config",
-		Path:     destPath,
-		SHA256:   hashHex,
-		Enabled:  true,
-		AllUsers: true,
-		Config:   configJSON,
+		ID:                    "test-config",
+		Path:                  destPath,
+		SHA256:                hashHex,
+		ManifestSchemaVersion: CurrentManifestSchemaVersion,
+		Enabled:               true,
+		AllUsers:              true,
+		Config:                configJSON,
 	}})
 	dataStore := &tests.MockDataStore{MockedPlugin: mockPluginRepo}
 

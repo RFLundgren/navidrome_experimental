@@ -58,10 +58,11 @@ var _ = Describe("ArtworkService", Ordered, func() {
 		mockPluginRepo := tests.CreateMockPluginRepo()
 		mockPluginRepo.Permitted = true
 		mockPluginRepo.SetData(model.Plugins{{
-			ID:      "test-artwork",
-			Path:    destPath,
-			SHA256:  hashHex,
-			Enabled: true,
+			ID:                    "test-artwork",
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
 		}})
 		dataStore := &tests.MockDataStore{
 			MockedProperty: &tests.MockedPropertyRepo{},

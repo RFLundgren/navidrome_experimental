@@ -349,11 +349,12 @@ var _ = Describe("LibraryService Integration", Ordered, func() {
 		mockPluginRepo := tests.CreateMockPluginRepo()
 		mockPluginRepo.Permitted = true
 		mockPluginRepo.SetData(model.Plugins{{
-			ID:           "test-library",
-			Path:         destPath,
-			SHA256:       hashHex,
-			Enabled:      true,
-			AllLibraries: true, // Grant access to all libraries for testing
+			ID:                    "test-library",
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
+			AllLibraries:          true, // Grant access to all libraries for testing
 		}})
 
 		mockLibraryRepo := &tests.MockLibraryRepo{}

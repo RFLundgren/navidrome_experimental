@@ -852,10 +852,11 @@ var _ = Describe("TaskQueueService Integration", Ordered, func() {
 		mockPluginRepo := tests.CreateMockPluginRepo()
 		mockPluginRepo.Permitted = true
 		mockPluginRepo.SetData(model.Plugins{{
-			ID:      "test-taskqueue",
-			Path:    destPath,
-			SHA256:  hashHex,
-			Enabled: true,
+			ID:                    "test-taskqueue",
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
 		}})
 		dataStore := &tests.MockDataStore{MockedPlugin: mockPluginRepo}
 

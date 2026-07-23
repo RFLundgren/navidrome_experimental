@@ -41,10 +41,11 @@ var _ = Describe("loadPluginWithConfig", func() {
 		repo := tests.CreateMockPluginRepo()
 		repo.Permitted = true
 		repo.SetData(model.Plugins{{
-			ID:      "test-taskqueue",
-			Path:    dest,
-			SHA256:  hex.EncodeToString(hash[:]),
-			Enabled: false,
+			ID:                    "test-taskqueue",
+			Path:                  dest,
+			SHA256:                hex.EncodeToString(hash[:]),
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               false,
 		}})
 		manager = &Manager{
 			plugins:        make(map[string]*plugin),
