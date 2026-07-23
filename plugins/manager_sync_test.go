@@ -62,6 +62,60 @@ var _ = Describe("removePluginFromDB", func() {
 	})
 })
 
+var _ = Describe("addPluginToDB", func() {
+	It("stamps the new row with CurrentManifestSchemaVersion", func() {
+		ctx := context.Background()
+		repo := tests.CreateMockPluginRepo()
+		m := &Manager{}
+
+		metadata := &PluginMetadata{
+			Manifest: &Manifest{Name: "S", Author: "a", Version: "1.0.0"},
+			SHA256:   "abc123",
+		}
+		Expect(m.addPluginToDB(ctx, repo, "my-plugin", "/plugins/my-plugin.ndp", metadata)).To(Succeed())
+
+		stored, err := repo.Get("my-plugin")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stored.ManifestSchemaVersion).To(Equal(CurrentManifestSchemaVersion))
+		Expect(stored.SHA256).To(Equal("abc123"))
+	})
+})
+
+var _ = Describe("updatePluginInDB", func() {
+	It("re-extracts and stamps the current schema version even when the file hash is unchanged", func() {
+		// Regression test: a plugin scanned by an older build (before a field
+		// like Actions existed on the Manifest struct) would otherwise never
+		// have that field reach the DB, since the sync loop previously only
+		// re-extracted on a file hash change.
+		ctx := context.Background()
+		repo := tests.CreateMockPluginRepo()
+		existing := model.Plugin{
+			ID:                    "my-plugin",
+			SHA256:                "abc123",
+			ManifestSchemaVersion: CurrentManifestSchemaVersion - 1,
+			Enabled:               true,
+		}
+		repo.SetData(model.Plugins{existing})
+
+		m := &Manager{}
+		metadata := &PluginMetadata{
+			Manifest: &Manifest{
+				Name: "S", Author: "a", Version: "1.0.0",
+				Actions: []Action{{Name: "testModel", Label: "Test Model"}},
+			},
+			SHA256: "abc123", // file itself did not change
+		}
+		Expect(m.updatePluginInDB(ctx, repo, &existing, "/plugins/my-plugin.ndp", metadata)).To(Succeed())
+
+		stored, err := repo.Get("my-plugin")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stored.ManifestSchemaVersion).To(Equal(CurrentManifestSchemaVersion))
+		Expect(stored.SHA256).To(Equal("abc123"))
+		Expect(stored.Manifest).To(ContainSubstring("testModel"))
+		Expect(stored.Enabled).To(BeFalse(), "re-extraction disables the plugin for re-approval, same as a real file change")
+	})
+})
+
 var _ = Describe("ComputeFileSHA256", func() {
 	It("returns a consistent 64-char lowercase hex hash for the same file", func() {
 		dir := GinkgoT().TempDir()

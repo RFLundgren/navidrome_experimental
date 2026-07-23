@@ -36,6 +36,19 @@ func (p *Permissions) DeclaredNames() []string {
 
 //go:generate go tool go-jsonschema -p plugins --struct-name-from-title -o manifest_gen.go manifest-schema.json
 
+// CurrentManifestSchemaVersion identifies this build's understanding of the
+// Manifest struct. The plugin sync in manager_sync.go only re-parses a
+// plugin's manifest.json when the .ndp file's own hash changes - a plugin
+// installed before a field was added to this struct (e.g. Actions) would
+// otherwise never get that field into the database, even after upgrading to
+// a build that supports it, since the file itself never changed. Bump this
+// whenever the Manifest struct (manifest_gen.go, generated from
+// manifest-schema.json) gains or changes a field that existing DB rows
+// should be re-extracted to pick up; the sync compares it against each
+// plugin's stored ManifestSchemaVersion and forces a re-extraction on
+// mismatch, independent of the file hash.
+const CurrentManifestSchemaVersion = 1
+
 // ParseManifest unmarshals manifest JSON and performs cross-field validation.
 // This is the single entry point for manifest parsing after reading from a file.
 func ParseManifest(data []byte) (*Manifest, error) {

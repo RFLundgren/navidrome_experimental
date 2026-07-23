@@ -57,13 +57,14 @@ func ComputeFileSHA256(path string) (string, error) {
 func (m *Manager) addPluginToDB(ctx context.Context, repo model.PluginRepository, name, path string, metadata *PluginMetadata) error {
 	now := time.Now()
 	newPlugin := &model.Plugin{
-		ID:        name,
-		Path:      path,
-		Manifest:  marshalManifest(metadata.Manifest),
-		SHA256:    metadata.SHA256,
-		Enabled:   false,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:                    name,
+		Path:                  path,
+		Manifest:              marshalManifest(metadata.Manifest),
+		SHA256:                metadata.SHA256,
+		ManifestSchemaVersion: CurrentManifestSchemaVersion,
+		Enabled:               false,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 	if err := repo.Put(newPlugin); err != nil {
 		return fmt.Errorf("adding plugin to DB: %w", err)
@@ -73,10 +74,13 @@ func (m *Manager) addPluginToDB(ctx context.Context, repo model.PluginRepository
 	return nil
 }
 
-// updatePluginInDB updates an existing plugin in the database after a file change.
-// If the plugin was enabled, it will be unloaded and disabled.
+// updatePluginInDB updates an existing plugin in the database after its file
+// changed and/or this build's understanding of the manifest schema advanced
+// past what was stored. If the plugin was enabled, it will be unloaded and
+// disabled either way, since its manifest data is being replaced.
 func (m *Manager) updatePluginInDB(ctx context.Context, repo model.PluginRepository, dbPlugin *model.Plugin, path string, metadata *PluginMetadata) error {
 	wasEnabled := dbPlugin.Enabled
+	fileChanged := dbPlugin.SHA256 != metadata.SHA256
 	if wasEnabled {
 		if err := m.unloadPlugin(dbPlugin.ID); err != nil {
 			log.Debug(ctx, "Plugin not loaded during change", "plugin", dbPlugin.ID, err)
@@ -85,13 +89,18 @@ func (m *Manager) updatePluginInDB(ctx context.Context, repo model.PluginReposit
 	dbPlugin.Path = path
 	dbPlugin.Manifest = marshalManifest(metadata.Manifest)
 	dbPlugin.SHA256 = metadata.SHA256
+	dbPlugin.ManifestSchemaVersion = CurrentManifestSchemaVersion
 	dbPlugin.Enabled = false
 	dbPlugin.LastError = ""
 	dbPlugin.UpdatedAt = time.Now()
 	if err := repo.Put(dbPlugin); err != nil {
 		return fmt.Errorf("updating plugin in DB: %w", err)
 	}
-	log.Info(ctx, "Plugin file changed", "plugin", dbPlugin.ID, "wasEnabled", wasEnabled)
+	if fileChanged {
+		log.Info(ctx, "Plugin file changed", "plugin", dbPlugin.ID, "wasEnabled", wasEnabled)
+	} else {
+		log.Info(ctx, "Plugin manifest re-extracted after schema upgrade", "plugin", dbPlugin.ID, "wasEnabled", wasEnabled)
+	}
 	m.sendPluginRefreshEvent(ctx, dbPlugin.ID)
 	return nil
 }
@@ -124,7 +133,9 @@ func (m *Manager) removePluginFromDB(ctx context.Context, repo model.PluginRepos
 }
 
 // syncPlugins scans the plugins folder and synchronizes with the database.
-// It handles new, changed, and removed plugins by comparing SHA-256 hashes.
+// It handles new, changed, and removed plugins by comparing SHA-256 hashes,
+// plus a full re-extraction whenever a plugin's stored manifest predates this
+// build's CurrentManifestSchemaVersion, even if its file hash is unchanged.
 // - New plugins are added to DB as disabled
 // - Changed plugins are updated in DB and disabled if they were enabled
 // - Removed plugins are deleted from DB (after unloading if enabled)
@@ -182,8 +193,13 @@ func (m *Manager) syncPlugins(ctx context.Context, folder string) error {
 			continue
 		}
 
-		// If plugin exists in DB with same hash, skip full manifest extraction
-		if exists && dbPlugin.SHA256 == sha256Hash {
+		// If plugin exists in DB with same hash and its stored manifest was
+		// parsed by this same build's understanding of the Manifest struct,
+		// skip full manifest extraction. A schema version mismatch means this
+		// build understands the manifest differently than whatever extracted
+		// it last (e.g. a newer field like Actions was added since) - that
+		// needs a full re-extraction even though the file itself is unchanged.
+		if exists && dbPlugin.SHA256 == sha256Hash && dbPlugin.ManifestSchemaVersion == CurrentManifestSchemaVersion {
 			// Plugin unchanged - just update path in case folder moved
 			if dbPlugin.Path != path {
 				dbPlugin.Path = path
