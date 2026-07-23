@@ -58,10 +58,11 @@ var _ = Describe("WebSocketService", Ordered, func() {
 		mockPluginRepo := tests.CreateMockPluginRepo()
 		mockPluginRepo.Permitted = true
 		mockPluginRepo.SetData(model.Plugins{{
-			ID:      "test-websocket",
-			Path:    destPath,
-			SHA256:  hashHex,
-			Enabled: true,
+			ID:                    "test-websocket",
+			Path:                  destPath,
+			SHA256:                hashHex,
+			ManifestSchemaVersion: CurrentManifestSchemaVersion,
+			Enabled:               true,
 		}})
 		dataStore := &tests.MockDataStore{MockedPlugin: mockPluginRepo}
 

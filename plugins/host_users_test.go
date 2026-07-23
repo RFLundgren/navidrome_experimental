@@ -553,12 +553,13 @@ func setupUsersIntegrationManagerWithEnabled(enabled, allUsers bool, allowedUser
 	mockPluginRepo := tests.CreateMockPluginRepo()
 	mockPluginRepo.Permitted = true
 	mockPluginRepo.SetData(model.Plugins{{
-		ID:       "test-users",
-		Path:     setup.destPath,
-		SHA256:   setup.hashHex,
-		Enabled:  enabled,
-		AllUsers: allUsers,
-		Users:    allowedUsers,
+		ID:                    "test-users",
+		Path:                  setup.destPath,
+		SHA256:                setup.hashHex,
+		ManifestSchemaVersion: CurrentManifestSchemaVersion,
+		Enabled:               enabled,
+		AllUsers:              allUsers,
+		Users:                 allowedUsers,
 	}})
 
 	mockUserRepo := tests.CreateMockUserRepo()
