@@ -420,6 +420,37 @@ var _ = Describe("Plugin API", func() {
 					Expect(w.Body.String()).To(ContainSubstring("folder not configured"))
 				})
 			})
+
+			Describe("POST /api/plugin/{id}/actions/{action}", func() {
+				It("triggers the named action and returns its result", func() {
+					mockManager.TriggerActionResult = "OK - test classification succeeded"
+
+					req := httptest.NewRequest("POST", "/plugin/test-plugin-2/actions/testConnection", nil)
+					req.Header.Set(consts.UIAuthorizationHeader, "Bearer "+adminToken)
+					w := httptest.NewRecorder()
+
+					router.ServeHTTP(w, req)
+
+					Expect(w.Code).To(Equal(http.StatusOK))
+					Expect(w.Body.String()).To(ContainSubstring("OK - test classification succeeded"))
+					Expect(mockManager.TriggerPluginActionCalls).To(HaveLen(1))
+					Expect(mockManager.TriggerPluginActionCalls[0].ID).To(Equal("test-plugin-2"))
+					Expect(mockManager.TriggerPluginActionCalls[0].ActionName).To(Equal("testConnection"))
+				})
+
+				It("returns the action's error message when it fails", func() {
+					mockManager.TriggerActionError = errors.New("invalid API key")
+
+					req := httptest.NewRequest("POST", "/plugin/test-plugin-2/actions/testConnection", nil)
+					req.Header.Set(consts.UIAuthorizationHeader, "Bearer "+adminToken)
+					w := httptest.NewRecorder()
+
+					router.ServeHTTP(w, req)
+
+					Expect(w.Code).To(Equal(http.StatusUnprocessableEntity))
+					Expect(w.Body.String()).To(ContainSubstring("invalid API key"))
+				})
+			})
 		})
 
 		Describe("as regular user", func() {
@@ -465,6 +496,16 @@ var _ = Describe("Plugin API", func() {
 
 			It("denies access to POST /api/plugin/rescan", func() {
 				req := httptest.NewRequest("POST", "/plugin/rescan", nil)
+				req.Header.Set(consts.UIAuthorizationHeader, "Bearer "+userToken)
+				w := httptest.NewRecorder()
+
+				router.ServeHTTP(w, req)
+
+				Expect(w.Code).To(Equal(http.StatusForbidden))
+			})
+
+			It("denies access to POST /api/plugin/{id}/actions/{action}", func() {
+				req := httptest.NewRequest("POST", "/plugin/test-plugin-1/actions/testConnection", nil)
 				req.Header.Set(consts.UIAuthorizationHeader, "Bearer "+userToken)
 				w := httptest.NewRecorder()
 

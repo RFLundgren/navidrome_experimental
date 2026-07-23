@@ -417,6 +417,37 @@ var _ = Describe("Manifest", func() {
 			err := m.Validate()
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		It("validates manifest with uniquely-named actions", func() {
+			m := &Manifest{
+				Name:    "Test",
+				Author:  "Author",
+				Version: "1.0.0",
+				Actions: []Action{
+					{Name: "testConnection", Label: "Test Connection"},
+					{Name: "clearCache", Label: "Clear Cache"},
+				},
+			}
+
+			err := m.Validate()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("returns error for duplicate action names", func() {
+			m := &Manifest{
+				Name:    "Test",
+				Author:  "Author",
+				Version: "1.0.0",
+				Actions: []Action{
+					{Name: "testConnection", Label: "Test Connection"},
+					{Name: "testConnection", Label: "Test It Again"},
+				},
+			}
+
+			err := m.Validate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("duplicate action name"))
+		})
 	})
 
 	Describe("ValidateWithCapabilities", func() {
@@ -491,6 +522,43 @@ var _ = Describe("Manifest", func() {
 			}
 
 			err := ValidateWithCapabilities(m, []Capability{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("validates declared actions with Action capability", func() {
+			m := &Manifest{
+				Name:    "Test",
+				Author:  "Author",
+				Version: "1.0.0",
+				Actions: []Action{{Name: "testConnection", Label: "Test Connection"}},
+			}
+
+			err := ValidateWithCapabilities(m, []Capability{CapabilityAction})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("returns error when actions are declared without Action capability", func() {
+			m := &Manifest{
+				Name:    "Test",
+				Author:  "Author",
+				Version: "1.0.0",
+				Actions: []Action{{Name: "testConnection", Label: "Test Connection"}},
+			}
+
+			err := ValidateWithCapabilities(m, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("actions"))
+			Expect(err.Error()).To(ContainSubstring(FuncOnAction))
+		})
+
+		It("validates manifest without actions and without Action capability", func() {
+			m := &Manifest{
+				Name:    "Test",
+				Author:  "Author",
+				Version: "1.0.0",
+			}
+
+			err := ValidateWithCapabilities(m, nil)
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})

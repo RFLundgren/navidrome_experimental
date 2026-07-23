@@ -27,6 +27,7 @@ func (api *Router) addPluginRoute(r chi.Router) {
 			r.Use(server.URLParamsMiddleware)
 			r.Get("/", rest.Get(constructor))
 			r.Put("/", api.updatePlugin)
+			r.Post("/actions/{action}", api.triggerPluginAction)
 		})
 	})
 }
@@ -164,6 +165,27 @@ func (api *Router) updatePlugin(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(plugin); err != nil {
 		log.Error(ctx, "Error encoding plugin response", err)
 	}
+}
+
+// triggerPluginAction runs a named action declared in the plugin's manifest
+// (e.g. a "Test Connection" button) and returns its result. The plugin must
+// be enabled/loaded, and must have declared the action in its manifest.
+func (api *Router) triggerPluginAction(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	action := chi.URLParam(r, "action")
+	ctx := r.Context()
+
+	result, err := api.pluginManager.TriggerPluginAction(ctx, id, action)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		log.Warn(ctx, "Plugin action failed", "id", id, "action", action, err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": err.Error()})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{"message": result})
 }
 
 // isValidJSON checks if a string is valid JSON
