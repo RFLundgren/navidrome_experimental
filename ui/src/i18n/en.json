@@ -152,6 +152,8 @@
         "title": "Create Playlist from %{genre}",
         "trackCount": "Number of tracks",
         "excludeSkipped": "Exclude skipped songs",
+        "excludeDuplicates": "Exclude duplicate versions of the same song",
+        "maxPerArtist": "Max tracks per artist (optional)",
         "submit": "Create",
         "empty": "No songs found for this genre"
       }
