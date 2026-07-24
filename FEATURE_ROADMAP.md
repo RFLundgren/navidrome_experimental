@@ -15,12 +15,12 @@ it serves this fork's own use (Cirque compatibility, personal library workflow).
 
 ## At a glance
 
-**8 shipped · 4 planned, ready to build · 3 in the backlog (assessed, not prioritized)**
+**9 shipped · 3 planned, ready to build · 3 in the backlog (assessed, not prioritized)**
 
 Nothing below is currently mid-build — everything is either done, or scoped-but-not-started. When something is
 picked up, move it into its own "🔨 In progress" section at the top so it's visible at a glance.
 
-### ✅ Shipped (8)
+### ✅ Shipped (9)
 
 | Feature | Source | Effort (est. → actual) |
 |---|---|---|
@@ -32,14 +32,14 @@ picked up, move it into its own "🔨 In progress" section at the top so it's vi
 | Physical folder browsing | own project, [navidrome-folder-roadmap.md](navidrome-folder-roadmap.md) | Large → Large |
 | Enhanced scrobble attribution (Pulse integration) | own project | Small → Small |
 | AI Tags / My Tags exploration dashboards + view toggles | own project, follow-up to User-defined song tagging | Medium → Medium |
+| AI-based auto-tagging/classification (as a plugin) | [#3145](https://github.com/navidrome/navidrome/discussions/3145); plugin itself built separately, see [AI-Auto-Tagging-Plugin](https://github.com/RFLundgren/AI-Auto-Tagging-Plugin) | Small (write path, this repo) → Small |
 
-### 📋 Planned — scoped, ready to build (4)
+### 📋 Planned — scoped, ready to build (3)
 
 | Feature | Source | Effort | Value |
 |---|---|---|---|
 | Remove/prevent duplicate playlist tracks | [#4206](https://github.com/navidrome/navidrome/discussions/4206) | Small (exact-dup) / Medium (fuzzy cross-album) | Medium–High |
 | Playlist "consume mode" (auto-remove on finish) | [#3276](https://github.com/navidrome/navidrome/discussions/3276) | Small–Medium | Low–Medium |
-| AI-based auto-tagging/classification (as a plugin) | [#3145](https://github.com/navidrome/navidrome/discussions/3145); plugin itself built separately, see [AI-Auto-Tagging-Plugin](https://github.com/RFLundgren/AI-Auto-Tagging-Plugin) | Small (write path, this repo) | Medium |
 | Classical music: show Work/Movement in the web UI | [#2953](https://github.com/navidrome/navidrome/discussions/2953) | Medium | Medium (niche but well-served by existing data) |
 
 Also planned, tracked in a separate doc rather than duplicated here: **Podcast Phase 4** — resume playback
@@ -293,6 +293,43 @@ literal reuse - more files than a pure copy-paste would have been, but no unexpe
 
 ---
 
+### AI-based auto-tagging/classification (as a plugin)
+
+**Source:** [#3145](https://github.com/navidrome/navidrome/discussions/3145) — auto-classify tracks by genre,
+language, mood, etc. using an AI service, so the whole library becomes filterable by AI-suggested tags instead of
+manually maintained playlists per genre/language.
+
+**Status:** Shipped and live-tested in production against a real Gemini API key. The plugin itself lives in its own
+repo, [AI-Auto-Tagging-Plugin](https://github.com/RFLundgren/AI-Auto-Tagging-Plugin), not in `plugins/examples/`
+here — it only talks to Navidrome through the plugin API, the same reasoning that already put Cirque and Pulse in
+their own repos rather than this one. A companion project,
+[AI Mood Playlists](https://github.com/RFLundgren/AI-Mood-Playlists-Plugin), builds and maintains actual playlists
+from these tags automatically. Full design doc and build plan live in those repos, not duplicated here.
+
+**What's in this repo:** five Subsonic-tier endpoints so the plugin can write/read tags without a separate identity
+of its own — `setUserTag`, `removeUserTag`, `getUserTags`, `getAllUserTags`, `getSongsByUserTag`
+(`server/subsonic/media_annotation.go`), mirroring `skip`/`unskip`.
+
+**AI Tags vs. My Tags separation (2026-07-22):** `media_file_tag` originally had no way to distinguish a tag AI
+Auto-Tagging wrote from one a human added via the pre-existing "Edit Tags" dialog (`#4823`'s Phase 1/3
+UI) — both landed in the same table, same shape. Added a `source` column (`ai` | `user`, migration
+`20270101010115`, backfilled by tag-name prefix for existing rows: `genre:`/`mood:`/`language:` → `ai`, everything
+else → `user`, since only AI Auto-Tagging ever uses that prefix convention). The two write paths now imply their
+own source with no caller changes needed: Subsonic's `setUserTag.view` (AI Auto-Tagging's only entry point) always
+writes `ai`; the native REST `/mediaFileTag` POST (the "Edit Tags" dialog's entry point) always writes `user`. Reads
+split the same way — `getUserTags.view`/`getAllUserTags.view`/`getSongsByUserTag.view` are AI-only (so a manually
+added tag can't fool AI Auto-Tagging's "already tagged, skip it" scan check, and can't leak into
+ai-mood-playlists' tag-based playlist building), while the native REST GETs accept an optional `?source=` filter
+and default to "any" for backward compatibility. `model.MediaFile` now exposes both `UserTags` (AI-sourced,
+displayed as the "AI Tags" column) and a new `MyTags` (user-sourced, displayed as a new "My Tags" column) in the
+Songs list. The generic `user_tag` smart-playlist filter/criteria intentionally still matches either source — it's
+a "my own tag, however it got there" filter, not an AI-vs-human distinction. **Effort: Small. Done** (repository
+layer covered by Ginkgo tests in `persistence/media_file_tag_repository_test.go`; not yet verified with a local
+`go build`/`go test` run — see this repo's known pre-existing cgo/sqlite3 toolchain limitation noted elsewhere in
+this doc).
+
+---
+
 ## 📋 Planned — scoped, ready to build
 
 ### Remove/prevent duplicate playlist tracks
@@ -375,43 +412,6 @@ count. The position-drift handling during auto-removal is a genuine (if containe
 itself regardless of whether the "full" version ever gets built — it's a real, already-available answer nobody
 in the thread suggested. Build the full version only if the near-real-time gap of the smart-playlist composition
 turns out to matter in practice.
-
----
-
-### AI-based auto-tagging/classification (as a plugin)
-
-**Source:** [#3145](https://github.com/navidrome/navidrome/discussions/3145) — auto-classify tracks by genre,
-language, mood, etc. using an AI service, so the whole library becomes filterable by AI-suggested tags instead of
-manually maintained playlists per genre/language.
-
-**Status:** Shipped and live-tested in production against a real Gemini API key. The plugin itself lives in its own
-repo, [AI-Auto-Tagging-Plugin](https://github.com/RFLundgren/AI-Auto-Tagging-Plugin), not in `plugins/examples/`
-here — it only talks to Navidrome through the plugin API, the same reasoning that already put Cirque and Pulse in
-their own repos rather than this one. A companion project,
-[AI Mood Playlists](https://github.com/RFLundgren/AI-Mood-Playlists-Plugin), builds and maintains actual playlists
-from these tags automatically. Full design doc and build plan live in those repos, not duplicated here.
-
-**What's in this repo:** five Subsonic-tier endpoints so the plugin can write/read tags without a separate identity
-of its own — `setUserTag`, `removeUserTag`, `getUserTags`, `getAllUserTags`, `getSongsByUserTag`
-(`server/subsonic/media_annotation.go`), mirroring `skip`/`unskip`.
-
-**AI Tags vs. My Tags separation (2026-07-22):** `media_file_tag` originally had no way to distinguish a tag AI
-Auto-Tagging wrote from one a human added via the pre-existing "Edit Tags" dialog (`#4823`'s Phase 1/3
-UI) — both landed in the same table, same shape. Added a `source` column (`ai` | `user`, migration
-`20270101010115`, backfilled by tag-name prefix for existing rows: `genre:`/`mood:`/`language:` → `ai`, everything
-else → `user`, since only AI Auto-Tagging ever uses that prefix convention). The two write paths now imply their
-own source with no caller changes needed: Subsonic's `setUserTag.view` (AI Auto-Tagging's only entry point) always
-writes `ai`; the native REST `/mediaFileTag` POST (the "Edit Tags" dialog's entry point) always writes `user`. Reads
-split the same way — `getUserTags.view`/`getAllUserTags.view`/`getSongsByUserTag.view` are AI-only (so a manually
-added tag can't fool AI Auto-Tagging's "already tagged, skip it" scan check, and can't leak into
-ai-mood-playlists' tag-based playlist building), while the native REST GETs accept an optional `?source=` filter
-and default to "any" for backward compatibility. `model.MediaFile` now exposes both `UserTags` (AI-sourced,
-displayed as the "AI Tags" column) and a new `MyTags` (user-sourced, displayed as a new "My Tags" column) in the
-Songs list. The generic `user_tag` smart-playlist filter/criteria intentionally still matches either source — it's
-a "my own tag, however it got there" filter, not an AI-vs-human distinction. **Effort: Small. Done** (repository
-layer covered by Ginkgo tests in `persistence/media_file_tag_repository_test.go`; not yet verified with a local
-`go build`/`go test` run — see this repo's known pre-existing cgo/sqlite3 toolchain limitation noted elsewhere in
-this doc).
 
 ---
 
