@@ -2,7 +2,6 @@ package tests
 
 import (
 	"errors"
-	"time"
 
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/model/id"
@@ -88,16 +87,6 @@ func (m *MockedPodcastEpisodeRepo) Put(episode *model.PodcastEpisode, _ ...strin
 		episode.ID = id.NewRandom()
 	}
 	m.Data[episode.ID] = episode
-	return nil
-}
-
-func (m *MockedPodcastEpisodeRepo) IncPlayCount(id string, _ time.Time) error {
-	if m.Err {
-		return errors.New("error")
-	}
-	if _, ok := m.Data[id]; !ok {
-		return model.ErrNotFound
-	}
 	return nil
 }
 
