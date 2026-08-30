@@ -441,18 +441,27 @@ func (api *Router) scrobblerSubmit(ctx context.Context, ids []string, times []ti
 		// episode it never streamed live through this server. Route those to
 		// the podcast play pipeline instead of the music scrobbler, which
 		// only knows about MediaFile ids.
-		if episode, err := api.ds.PodcastEpisode(ctx).Get(id); err == nil {
+		if _, err := api.ds.MediaFile(ctx).Get(id); err == nil {
+			submissions = append(submissions, scrobbler.Submission{
+				TrackID:      id,
+				Timestamp:    t,
+				Source:       source,
+				Origin:       origin,
+				PlaybackMode: playbackMode,
+			})
+		} else if episode, err := api.ds.PodcastEpisode(ctx).Get(id); err == nil {
 			api.scrobblePodcastEpisode(ctx, username, playerName, source, episode, t)
-			continue
+		} else {
+			// If neither is found in the database, still append to submissions
+			// so the standard scrobbler error logging runs and informs the user.
+			submissions = append(submissions, scrobbler.Submission{
+				TrackID:      id,
+				Timestamp:    t,
+				Source:       source,
+				Origin:       origin,
+				PlaybackMode: playbackMode,
+			})
 		}
-
-		submissions = append(submissions, scrobbler.Submission{
-			TrackID:      id,
-			Timestamp:    t,
-			Source:       source,
-			Origin:       origin,
-			PlaybackMode: playbackMode,
-		})
 	}
 
 	if len(submissions) == 0 {
