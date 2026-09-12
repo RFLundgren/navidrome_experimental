@@ -270,21 +270,26 @@ func toPodcastEpisode(ep model.PodcastEpisode, channel model.PodcastChannel) res
 	if channel.UploadedImage != "" {
 		coverArt = channel.CoverArtID().String()
 	}
+	var osChild *responses.OpenSubsonicChild
+	if ep.IsListened() {
+		osChild = &responses.OpenSubsonicChild{Played: ep.PlayDate}
+	}
 	return responses.PodcastEpisode{
 		Child: responses.Child{
-			Id:          ep.ID,
-			Parent:      channel.ID,
-			IsDir:       false,
-			Title:       ep.Title,
-			Album:       channel.Title,
-			Artist:      channel.Title,
-			CoverArt:    coverArt,
-			Size:        ep.Size,
-			ContentType: ep.ContentType,
-			Suffix:      ep.Suffix,
-			Duration:    int32(ep.Duration),
-			BitRate:     int32(ep.BitRate),
-			PlayCount:   ep.PlayCount,
+			Id:                ep.ID,
+			Parent:            channel.ID,
+			IsDir:             false,
+			Title:             ep.Title,
+			Album:             channel.Title,
+			Artist:            channel.Title,
+			CoverArt:          coverArt,
+			Size:              ep.Size,
+			ContentType:       ep.ContentType,
+			Suffix:            ep.Suffix,
+			Duration:          int32(ep.Duration),
+			BitRate:           int32(ep.BitRate),
+			PlayCount:         ep.PlayCount,
+			OpenSubsonicChild: osChild,
 		},
 		StreamId:    ep.ID,
 		ChannelId:   ep.ChannelID,
