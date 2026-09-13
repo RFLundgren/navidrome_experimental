@@ -8,7 +8,6 @@ import (
 
 	. "github.com/Masterminds/squirrel"
 	"github.com/navidrome/navidrome/log"
-	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/model/request"
 )
 
@@ -96,52 +95,43 @@ type bookmark struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-func (r sqlRepository) GetBookmarks() (model.Bookmarks, error) {
-	user, _ := request.UserFrom(r.ctx)
-
+// bookmarkedItemIDs returns the ids of this repository's own items (media files, podcast
+// episodes, ...) that the current user has bookmarked. Querying from r.tableName rather than the
+// bookmark table directly is deliberate: it's what excludes a stale bookmark left behind by a
+// since-deleted item (see cleanBookmarks, which sweeps those up eventually, but reads shouldn't
+// have to wait for that).
+func (r sqlRepository) bookmarkedItemIDs() ([]string, error) {
 	idField := r.tableName + ".id"
-	sq := r.newSelect().Columns(r.tableName + ".*")
-	sq = r.withAnnotation(sq, idField)
+	sq := r.newSelect().Columns(idField)
 	sq = r.withBookmark(sq, idField).Where(NotEq{bookmarkTable + ".item_id": nil})
-	var mfs dbMediaFiles // TODO Decouple from media_file
-	err := r.queryAll(sq, &mfs)
-	if err != nil {
-		log.Error(r.ctx, "Error getting mediafiles with bookmarks", "user", user.UserName, err)
+	var rows []struct{ ID string }
+	if err := r.queryAll(sq, &rows); err != nil {
 		return nil, err
 	}
-
-	ids := make([]string, len(mfs))
-	mfMap := make(map[string]int)
-	for i, mf := range mfs {
-		ids[i] = mf.ID
-		mfMap[mf.ID] = i
+	ids := make([]string, len(rows))
+	for i, row := range rows {
+		ids[i] = row.ID
 	}
+	return ids, nil
+}
 
-	sq = Select("*").From(bookmarkTable).Where(r.bmkID(ids...))
+// bookmarksByID returns this repository's own raw bookmark rows (comment, position, timestamps),
+// keyed by item id. Callers combine this with their own typed GetAll (which already knows how to
+// decode their table's columns) to assemble model.Bookmark values - see
+// mediaFileRepository.GetBookmarks / podcastEpisodeRepository.GetBookmarks. This split exists
+// because a single query decoding into one concrete type (the previous approach, hardcoded to
+// dbMediaFile) can't serve every bookmarkable entity type generically.
+func (r sqlRepository) bookmarksByID(itemIDs []string) (map[string]bookmark, error) {
+	sq := Select("*").From(bookmarkTable).Where(r.bmkID(itemIDs...))
 	var bmks []bookmark
-	err = r.queryAll(sq, &bmks)
-	if err != nil {
-		log.Error(r.ctx, "Error getting bookmarks", "user", user.UserName, "ids", ids, err)
+	if err := r.queryAll(sq, &bmks); err != nil {
 		return nil, err
 	}
-
-	resp := make(model.Bookmarks, len(bmks))
-	for i, bmk := range bmks {
-		if itemIdx, ok := mfMap[bmk.ItemID]; !ok {
-			log.Debug(r.ctx, "Invalid bookmark", "id", bmk.ItemID, "user", user.UserName)
-			continue
-		} else {
-			resp[i] = model.Bookmark{
-				Comment:   bmk.Comment,
-				Position:  bmk.Position,
-				CreatedAt: bmk.CreatedAt,
-				UpdatedAt: bmk.UpdatedAt,
-				ChangedBy: bmk.ChangedBy,
-				Item:      *mfs[itemIdx].MediaFile,
-			}
-		}
+	byID := make(map[string]bookmark, len(bmks))
+	for _, bmk := range bmks {
+		byID[bmk.ItemID] = bmk
 	}
-	return resp, nil
+	return byID, nil
 }
 
 func (r sqlRepository) cleanBookmarks() error {
@@ -154,4 +144,11 @@ func (r sqlRepository) cleanBookmarks() error {
 		log.Debug(r.ctx, "Clean-up bookmarks", "totalDeleted", c, "itemType", r.tableName)
 	}
 	return nil
+}
+
+// CleanBookmarks is the exported counterpart to cleanBookmarks, for callers outside package
+// persistence (e.g. core/podcasts, tearing down an orphaned podcast channel's episodes) that only
+// have the model.BookmarkableRepository interface to work with, not the unexported concrete type.
+func (r sqlRepository) CleanBookmarks() error {
+	return r.cleanBookmarks()
 }

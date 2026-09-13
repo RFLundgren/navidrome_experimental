@@ -42,8 +42,11 @@ func (r *podcastEpisodeRepository) isPermitted() bool {
 // play_count/play_date ("listened") and downloaded/downloaded_at (this user's own "in my
 // downloaded list" flag - see model.PodcastEpisode.Downloaded) as one query. Doesn't reuse
 // sqlRepository.withAnnotation, which also selects starred/rating/average_rating - podcast
-// episodes have no average_rating column and don't support starring/rating (yet).
+// episodes have no average_rating column and don't support starring/rating (yet). Also composes
+// in sqlRepository.withBookmark, so every read carries this user's own last-reported playback
+// position (model.PodcastEpisode.BookmarkPosition) alongside the annotation columns.
 func (r *podcastEpisodeRepository) withPlayAnnotation(sel SelectBuilder) SelectBuilder {
+	sel = r.withBookmark(sel, "podcast_episode.id")
 	userID := loggedUser(r.ctx).ID
 	if userID == invalidUserId {
 		return sel
@@ -142,6 +145,42 @@ func (r *podcastEpisodeRepository) Put(episode *model.PodcastEpisode, colsToUpda
 // the explicit counterpart to sqlRepository.IncPlayCount (embedded via podcastEpisodeRepository).
 func (r *podcastEpisodeRepository) ResetPlayCount(itemID string) error {
 	return r.annUpsert(map[string]any{"play_count": 0, "play_date": nil}, itemID)
+}
+
+// GetBookmarks returns the current user's own bookmarked episodes, following the same
+// generic-id-fetch-plus-typed-assembly pattern as mediaFileRepository.GetBookmarks.
+func (r *podcastEpisodeRepository) GetBookmarks() (model.Bookmarks, error) {
+	ids, err := r.bookmarkedItemIDs()
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return model.Bookmarks{}, nil
+	}
+	episodes, err := r.GetAll(model.QueryOptions{Filters: Eq{"podcast_episode.id": ids}})
+	if err != nil {
+		return nil, err
+	}
+	byID, err := r.bookmarksByID(ids)
+	if err != nil {
+		return nil, err
+	}
+	resp := make(model.Bookmarks, 0, len(episodes))
+	for _, ep := range episodes {
+		bmk, ok := byID[ep.ID]
+		if !ok {
+			continue
+		}
+		resp = append(resp, model.Bookmark{
+			Comment:   bmk.Comment,
+			Position:  bmk.Position,
+			CreatedAt: bmk.CreatedAt,
+			UpdatedAt: bmk.UpdatedAt,
+			ChangedBy: bmk.ChangedBy,
+			Item:      ep,
+		})
+	}
+	return resp, nil
 }
 
 // SetDownloaded sets/clears userID's own "in my downloaded list" flag for the given episodes.

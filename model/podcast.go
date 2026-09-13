@@ -141,6 +141,10 @@ type PodcastEpisode struct {
 	// excluded from writes.
 	PlayCount int64      `structs:"-" json:"playCount,omitempty"`
 	PlayDate  *time.Time `structs:"-" json:"playDate,omitempty"`
+	// Bookmarkable.BookmarkPosition is the current user's own last-reported playback position for
+	// this episode (via the standard Subsonic bookmark mechanism), the same field songs use -
+	// populated by repository reads from the shared bookmark table, not a podcast_episode column.
+	Bookmarkable `structs:"-"`
 	// Downloaded/DownloadedAt is the CURRENT USER's own "this is in my downloaded list" flag -
 	// distinct from DownloadStatus, which tracks whether the underlying file exists on disk at
 	// all (a shared, server-wide fact, since the file itself is only ever fetched once regardless
@@ -220,4 +224,5 @@ type PodcastEpisodeRepository interface {
 	// against a system/admin context with no single "current user" to scope GetAll's usual
 	// annotation join to.
 	GetDownloadedForUser(userID, channelID string) (PodcastEpisodes, error)
+	BookmarkableRepository
 }

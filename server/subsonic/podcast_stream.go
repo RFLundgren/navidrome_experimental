@@ -11,7 +11,6 @@ import (
 
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
-	"github.com/navidrome/navidrome/model/request"
 )
 
 const onDemandDownloadTimeout = 60 * time.Second
@@ -27,31 +26,11 @@ func (api *Router) streamPodcastEpisode(ctx context.Context, w http.ResponseWrit
 		return err
 	}
 
-	// Mark listened as soon as a client starts streaming, mirroring the
-	// "starting" state a song's ReportPlayback records - simpler than
-	// tracking playback position/completion thresholds, which podcast
-	// episodes don't support today.
-	if err := api.ds.PodcastEpisode(ctx).IncPlayCount(episode.ID, time.Now()); err != nil {
-		log.Warn(ctx, "Error recording podcast episode play", "id", id, err)
-	}
-
-	if api.podcastNotifier != nil {
-		username, _ := request.UsernameFrom(ctx)
-		playerName := ""
-		if player, ok := request.PlayerFrom(ctx); ok {
-			playerName = player.Name
-		}
-		source := r.URL.Query().Get("nd_source")
-		if !validCirqueSource(source) {
-			source = ""
-		}
-		log.Info(ctx, "Cirque source attribution", "nd_source", source, "path", r.URL.Path) // TODO: remove after verification
-		channelTitle := ""
-		if ch, cerr := api.ds.PodcastChannel(ctx).Get(episode.ChannelID); cerr == nil {
-			channelTitle = ch.Title
-		}
-		api.podcastNotifier.DispatchPodcastPlayed(ctx, username, playerName, source, episode, channelTitle)
-	}
+	// Streaming starting is not treated as a play - a several-second click isn't a listen. The
+	// client's own position reports (via createBookmark.view, see recordEpisodePosition in
+	// podcast.go) are what actually mark the episode played, once they cross the completion
+	// threshold. That's also where the PodcastScrobbler plugin dispatch this used to fire here now
+	// happens instead.
 
 	if episode.IsDownloaded() {
 		if err := serveLocalPodcastFile(w, r, episode, ""); err == nil {

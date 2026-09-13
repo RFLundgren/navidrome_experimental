@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	. "github.com/Masterminds/squirrel"
 	"github.com/navidrome/navidrome/conf"
@@ -14,6 +15,12 @@ import (
 	"github.com/navidrome/navidrome/model/request"
 	"github.com/navidrome/navidrome/server/events"
 )
+
+// episodeCompletionThreshold is how much of an episode's duration a client must report reaching
+// (via createBookmark.view's position - see RecordEpisodePosition) before it counts as "played".
+// Deliberately short of 100%: podcast outros/credits are routinely skipped without the listener
+// having abandoned the episode.
+const episodeCompletionThreshold = 0.90
 
 type Podcasts interface {
 	// Subscribe ensures the shared channel for url exists (creating it if this is the first
@@ -42,6 +49,12 @@ type Podcasts interface {
 	// flagged - see retention.go's cleanupOrphanedFiles.
 	DeleteEpisode(ctx context.Context, id string) error
 	RunRetention(ctx context.Context) error
+	// RecordEpisodePosition feeds a client-reported playback position (from createBookmark.view,
+	// in milliseconds) into completion detection for the current user (from ctx) - see the method
+	// doc for the full rationale. Returns true the first time this position crosses
+	// episodeCompletionThreshold for this user/episode, so the caller knows to fire any
+	// completion-triggered side effects (e.g. the PodcastScrobbler plugin dispatch).
+	RecordEpisodePosition(ctx context.Context, episodeID string, positionMs int64) (bool, error)
 }
 
 type podcasts struct {
@@ -189,6 +202,12 @@ func (p *podcasts) deleteOrphanedChannel(ctx context.Context, id string) error {
 			log.Warn(ctx, "Error removing deleted podcast episode from playlists", "id", ep.ID, err)
 		}
 	}
+	// Sweep up any bookmarks (playback positions) left behind for the now-deleted episodes -
+	// otherwise they'd sit orphaned in the bookmark table forever, unlike media_file bookmarks
+	// which get the same treatment via the library scanner's GC pass.
+	if err := p.ds.PodcastEpisode(ctx).CleanBookmarks(); err != nil {
+		log.Warn(ctx, "Error cleaning up bookmarks for deleted podcast episodes", "channelId", id, err)
+	}
 	p.notifyRefresh(ctx, "podcastChannel", id)
 	p.notifyRefresh(ctx, "podcastEpisode")
 	return nil
@@ -225,6 +244,34 @@ func (p *podcasts) SearchFeeds(ctx context.Context, query string) ([]FeedSearchR
 
 func (p *podcasts) TopFeeds(ctx context.Context, country string) ([]FeedSearchResult, error) {
 	return topFeeds(ctx, country)
+}
+
+// RecordEpisodePosition feeds a client-reported playback position into the episode's completion
+// state. Unlike the old "mark listened the instant streaming starts" behavior, this only counts
+// as a play once position crosses episodeCompletionThreshold of the episode's duration - a
+// several-second click is not a play. Returns true the first time this call pushes the episode
+// over that threshold; repeated calls after that point are no-ops (guarded by IsListened) so
+// PlayCount doesn't inflate on every subsequent position update from the same listen.
+//
+// Episodes with no known duration (some feeds omit <itunes:duration>) can't have a completion
+// ratio computed at all - explicit markPodcastEpisodeListened.view or a scrobble.view submission
+// remain the only way to mark those as played.
+func (p *podcasts) RecordEpisodePosition(ctx context.Context, episodeID string, positionMs int64) (bool, error) {
+	episode, err := p.ds.PodcastEpisode(ctx).Get(episodeID)
+	if err != nil {
+		return false, err
+	}
+	if episode.IsListened() || episode.Duration <= 0 {
+		return false, nil
+	}
+	thresholdMs := int64(float64(episode.Duration) * 1000 * episodeCompletionThreshold)
+	if positionMs < thresholdMs {
+		return false, nil
+	}
+	if err := p.ds.PodcastEpisode(ctx).IncPlayCount(episodeID, time.Now()); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (p *podcasts) notifyRefresh(ctx context.Context, resource string, ids ...string) {

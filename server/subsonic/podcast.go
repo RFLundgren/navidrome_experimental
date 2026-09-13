@@ -7,6 +7,7 @@ import (
 
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
+	"github.com/navidrome/navidrome/model/request"
 	"github.com/navidrome/navidrome/server/events"
 	"github.com/navidrome/navidrome/server/subsonic/responses"
 	"github.com/navidrome/navidrome/utils/req"
@@ -289,6 +290,7 @@ func toPodcastEpisode(ep model.PodcastEpisode, channel model.PodcastChannel) res
 			Duration:          int32(ep.Duration),
 			BitRate:           int32(ep.BitRate),
 			PlayCount:         ep.PlayCount,
+			BookmarkPosition:  ep.BookmarkPosition,
 			OpenSubsonicChild: osChild,
 		},
 		StreamId:    ep.ID,
@@ -297,4 +299,44 @@ func toPodcastEpisode(ep model.PodcastEpisode, channel model.PodcastChannel) res
 		Status:      podcastEpisodeStatus(ep.DownloadStatus, subscriptionPolicy(channel)),
 		PublishDate: ep.PublishDate,
 	}
+}
+
+// childFromPodcastEpisode builds the same responses.Child a getPodcasts.view episode carries, for
+// use anywhere a bare Child is needed instead of the full responses.PodcastEpisode wrapper (see
+// GetBookmarks in bookmarks.go, which lists bookmarks across every bookmarkable type as plain
+// Child entries).
+func childFromPodcastEpisode(ctx context.Context, ds model.DataStore, ep model.PodcastEpisode) (responses.Child, error) {
+	channel, err := ds.PodcastChannel(ctx).Get(ep.ChannelID)
+	if err != nil {
+		return responses.Child{}, err
+	}
+	return toPodcastEpisode(ep, *channel).Child, nil
+}
+
+// recordEpisodePosition feeds a client-reported playback position (from createBookmark.view) into
+// the podcast completion check (core/podcasts.Podcasts.RecordEpisodePosition), and - if this
+// position just pushed the episode over the completion threshold for the first time - fires the
+// same PodcastScrobbler plugin dispatch streamPodcastEpisode used to fire at stream start, now
+// anchored to an actual completed listen instead of a stream-start ping.
+func (api *Router) recordEpisodePosition(r *http.Request, episode model.PodcastEpisode, positionMs int64) error {
+	ctx := r.Context()
+	justCompleted, err := api.podcasts.RecordEpisodePosition(ctx, episode.ID, positionMs)
+	if err != nil || !justCompleted || api.podcastNotifier == nil {
+		return err
+	}
+	username, _ := request.UsernameFrom(ctx)
+	playerName := ""
+	if player, ok := request.PlayerFrom(ctx); ok {
+		playerName = player.Name
+	}
+	source := r.URL.Query().Get("nd_source")
+	if !validCirqueSource(source) {
+		source = ""
+	}
+	channelTitle := ""
+	if ch, cerr := api.ds.PodcastChannel(ctx).Get(episode.ChannelID); cerr == nil {
+		channelTitle = ch.Title
+	}
+	api.podcastNotifier.DispatchPodcastPlayed(ctx, username, playerName, source, &episode, channelTitle)
+	return nil
 }
