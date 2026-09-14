@@ -9,6 +9,7 @@ import (
 
 	"github.com/navidrome/navidrome/core/auth"
 	"github.com/navidrome/navidrome/model"
+	"github.com/navidrome/navidrome/server"
 	"github.com/navidrome/navidrome/server/jellyfin/dto"
 	"github.com/navidrome/navidrome/tests"
 	. "github.com/onsi/ginkgo/v2"
@@ -22,7 +23,7 @@ var _ = Describe("AuthenticateByName", func() {
 		ds = &tests.MockDataStore{}
 		auth.Init(ds)
 		ur := ds.User(context.Background()).(*tests.MockedUserRepo)
-		Expect(ur.Put(&model.User{ID: "u1", UserName: "alice", NewPassword: "secret"})).To(Succeed())
+		Expect(ur.Put(&model.User{ID: testID("u1"), UserName: "alice", NewPassword: "secret"})).To(Succeed())
 		api = &Router{ds: ds}
 	})
 
@@ -68,7 +69,7 @@ var _ = Describe("AuthenticateByName", func() {
 
 	It("reflects an administrator in the User.Policy", func() {
 		ur := ds.User(context.Background()).(*tests.MockedUserRepo)
-		Expect(ur.Put(&model.User{ID: "admin1", UserName: "root", NewPassword: "secret", IsAdmin: true})).To(Succeed())
+		Expect(ur.Put(&model.User{ID: testID("admin1"), UserName: "root", NewPassword: "secret", IsAdmin: true})).To(Succeed())
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", "/Users/AuthenticateByName",
@@ -92,12 +93,24 @@ var _ = Describe("AuthenticateByName", func() {
 
 	It("rejects an empty password even for a user with an empty stored password with 401", func() {
 		ur := ds.User(context.Background()).(*tests.MockedUserRepo)
-		Expect(ur.Put(&model.User{ID: "e", UserName: "empty", NewPassword: ""})).To(Succeed())
+		Expect(ur.Put(&model.User{ID: testID("e"), UserName: "empty", NewPassword: ""})).To(Succeed())
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", "/Users/AuthenticateByName",
 			strings.NewReader(`{"Username":"empty","Pw":""}`))
 		api.authenticateByName(w, r)
 		Expect(w.Code).To(Equal(http.StatusUnauthorized))
+	})
+})
+
+var _ = Describe("AuthenticateByName body limit", func() {
+	It("rejects a request body larger than the limit", func() {
+		ds := &tests.MockDataStore{}
+		api := &Router{ds: ds}
+		w := httptest.NewRecorder()
+		body := `{"Username":"alice","Pw":"secret","Padding":"` + strings.Repeat("x", server.MaxLoginBodySize) + `"}`
+		r := httptest.NewRequest("POST", "/Users/AuthenticateByName", strings.NewReader(body))
+		server.LimitLoginBody(http.HandlerFunc(api.authenticateByName)).ServeHTTP(w, r)
+		Expect(w.Code).To(Equal(http.StatusBadRequest))
 	})
 })

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"iter"
 	"slices"
 	"sort"
 	"strconv"
@@ -44,6 +43,10 @@ func (p dbPlaylist) PostMapArgs(args map[string]any) error {
 		if err != nil {
 			return fmt.Errorf("invalid criteria expression: %w", err)
 		}
+		// Smart playlist counters are owned by refreshCounters (evaluation), never by callers
+		delete(args, "song_count")
+		delete(args, "duration")
+		delete(args, "size")
 		return nil
 	}
 	delete(args, "rules")
@@ -62,7 +65,8 @@ func NewPlaylistRepository(ctx context.Context, db dbx.Builder) model.PlaylistRe
 		"physical_folder_id": eqFilter,
 	})
 	r.setSortMappings(map[string]string{
-		"owner_name": "owner_name",
+		"name":       naturalSort("playlist.name"),
+		"owner_name": naturalSort("owner_name"),
 	})
 	return r
 }
@@ -117,7 +121,8 @@ func (r *playlistRepository) Put(p *model.Playlist, cols ...string) error {
 		_, err := r.put(pls.ID, pls, cols...)
 		return err
 	}
-	if pls.ID == "" {
+	isNew := pls.ID == ""
+	if isNew {
 		pls.CreatedAt = time.Now()
 	}
 	pls.UpdatedAt = time.Now()
@@ -135,6 +140,12 @@ func (r *playlistRepository) Put(p *model.Playlist, cols ...string) error {
 	// Only update tracks if they were specified
 	if len(pls.Tracks) > 0 {
 		return r.updateTracks(id, pls.Tracks)
+	}
+	pls.ID = id // r.put assigns the generated id to p, not to this copy
+	if isNew {
+		// Even a trackless new playlist has art to find (an imported m3u can carry an
+		// ExternalImageURL); an update landing here changed only metadata, so leave its cover be.
+		r.enqueueCoverRebuild(id)
 	}
 	return r.refreshCounters(&pls.Playlist)
 }
@@ -175,7 +186,14 @@ func (r *playlistRepository) findBy(sql Sqlizer) (*model.Playlist, error) {
 		return nil, model.ErrNotFound
 	}
 
-	return &pls[0].Playlist, nil
+	list := model.Playlists{pls[0].Playlist}
+	r.hydrateArtwork(list)
+	return &list[0], nil
+}
+
+func (r *playlistRepository) hydrateArtwork(playlists model.Playlists) {
+	hydrateItems(r.ctx, r.db, model.KindPlaylistArtwork, playlists,
+		func(p *model.Playlist) (string, *model.ItemImage) { return p.ID, &p.ItemImage })
 }
 
 func (r *playlistRepository) GetAll(options ...model.QueryOptions) (model.Playlists, error) {
@@ -189,22 +207,34 @@ func (r *playlistRepository) GetAll(options ...model.QueryOptions) (model.Playli
 	for i, p := range res {
 		playlists[i] = p.Playlist
 	}
+	r.hydrateArtwork(playlists)
 	return playlists, err
 }
 
+// getAllIDs returns the IDs of GetAll's row set, skipping its per-row processing.
+func (r *playlistRepository) getAllIDs(options ...model.QueryOptions) ([]string, error) {
+	// Joins a projection of user, not the table: its name/created_at columns would make an ORDER BY
+	// on the playlist's own ambiguous.
+	sq := r.newSelect(options...).Columns("playlist.id", "user.user_name as owner_name").
+		Join("(select id, user_name from user) user on user.id = owner_id").Where(r.userFilter())
+	if filtersNeedAnnotation(sq) {
+		sq = r.withAnnotation(sq, "playlist.id")
+	}
+	ids := []string{}
+	err := r.queryAllSlice(sq, &ids)
+	return ids, err
+}
+
 func (r *playlistRepository) GetCursor(options ...model.QueryOptions) (model.PlaylistCursor, error) {
-	// Same userFilter as GetAll: a cursor must not widen visibility beyond public/owned playlists.
-	sel := r.selectPlaylist(options...).Where(r.userFilter())
-	cursor, err := queryWithStableResults[dbPlaylist](r.sqlRepository, sel)
+	// Both passes apply userFilter, so a visibility change between them cannot widen the cursor.
+	ids, err := r.getAllIDs(options...)
 	if err != nil {
 		return nil, err
 	}
-	return wrapPlaylistCursor(cursor), nil
-}
-
-// dbPlaylist embeds a value, not a pointer, so its model is never nil.
-func wrapPlaylistCursor(cursor iter.Seq2[dbPlaylist, error]) model.PlaylistCursor {
-	return model.PlaylistCursor(wrapCursor(cursor, func(p dbPlaylist) *model.Playlist { return &p.Playlist }))
+	opts := chunkOptions(options, "playlist.id")
+	return model.PlaylistCursor(streamByIDs(ids, func(chunk []string) (model.Playlists, error) {
+		return r.GetAll(opts(chunk))
+	})), nil
 }
 
 func (r *playlistRepository) GetPlaylists(itemID string) (model.Playlists, error) {
@@ -223,6 +253,7 @@ func (r *playlistRepository) GetPlaylists(itemID string) (model.Playlists, error
 	for i, p := range res {
 		playlists[i] = p.Playlist
 	}
+	r.hydrateArtwork(playlists)
 	return playlists, nil
 }
 
@@ -292,6 +323,7 @@ func (r *playlistRepository) addTracks(playlistId string, startingPos int, refs 
 		}
 	}
 
+	r.enqueueCoverRebuild(playlistId)
 	return r.refreshCounters(&model.Playlist{ID: playlistId})
 }
 
@@ -329,11 +361,12 @@ func (r *playlistRepository) refreshCounters(pls *model.Playlist) error {
 	count := songRes.Count + episodeRes.Count
 
 	// Update playlist's total duration, size and count
+	now := time.Now()
 	upd := Update("playlist").
 		Set("duration", duration).
 		Set("size", size).
 		Set("song_count", count).
-		Set("updated_at", time.Now()).
+		Set("updated_at", now).
 		Where(Eq{"id": pls.ID})
 	_, err := r.executeSQL(upd)
 	if err != nil {
@@ -342,6 +375,7 @@ func (r *playlistRepository) refreshCounters(pls *model.Playlist) error {
 	pls.SongCount = int(count)
 	pls.Duration = duration
 	pls.Size = int64(size)
+	pls.UpdatedAt = now
 	return nil
 }
 
@@ -388,6 +422,16 @@ func (t dbPlaylistEpisodeTrack) toPlaylistTrack(playlistID string) model.Playlis
 			CreatedAt: ep.CreatedAt,
 			UpdatedAt: ep.UpdatedAt,
 		},
+	}
+}
+
+// enqueueCoverRebuild re-resolves the generated 2x2 grid. Call it only when the track set changes:
+// the grid samples albums at random, so rebuilding after a mere rename would change the cover.
+func (r *playlistRepository) enqueueCoverRebuild(id string) {
+	item := model.ArtworkQueueItem{ItemKind: model.KindPlaylistArtwork.Prefix(), ItemID: id,
+		ImageType: model.ImageTypePrimary, Priority: model.ArtworkPriorityScan}
+	if err := NewArtworkQueueRepository(r.ctx, r.db).Enqueue(item); err != nil {
+		log.Warn(r.ctx, "could not enqueue playlist artwork after content change", "id", id, err)
 	}
 }
 
@@ -487,6 +531,7 @@ func (r *playlistRepository) loadTracks(playlistID string, options model.QueryOp
 		tracks = tracks[:options.Max]
 	}
 
+	hydratePlaylistTrackArtwork(r.ctx, r.db, tracks)
 	return tracks, nil
 }
 
@@ -664,6 +709,7 @@ func (r *playlistRepository) renumber(id string) error {
 	if err != nil {
 		return err
 	}
+	r.enqueueCoverRebuild(id)
 	return r.refreshCounters(&model.Playlist{ID: id})
 }
 

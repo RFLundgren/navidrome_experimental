@@ -33,6 +33,9 @@ compatibility, same plugin system. This fork just adds:
 - 🎙️📡 **Podcast play attribution** *(develop only)* — podcast episode plays now dispatch to plugins too, with a
   validated `nd_source` device-type field for precise client identification. See
   [below](#enhanced-scrobble-attribution-pulse-integration) for details.
+- ⏯️ **Podcast resume position & real completion detection** *(develop only)* — episode playback position is now
+  tracked through the standard Subsonic bookmark mechanism, and an episode is only marked "played" once you've
+  actually finished it, not the instant you hit play. See [below](#podcast-support-experimental) for details.
 - 🏷️ **User-defined song tagging** *(develop only)* — free-form personal labels (**My Tags**) plus shared,
   admin-written classification tags (**AI Tags**), with tag-based filtering, bulk playlist add, smart-playlist
   criteria support, and a plugin-facing API powering an AI auto-tagging + auto-playlist ecosystem. See
@@ -60,7 +63,7 @@ compatibility, same plugin system. This fork just adds:
 [Getting navidrome-experimental](#getting-navidrome-experimental) below for what the two tags mean. They'll move to
 *(stable & develop)* the next time a release is cut.
 
-Kept in sync with upstream: currently based on [Navidrome v0.63.2](https://github.com/navidrome/navidrome/releases/tag/v0.63.2),
+Kept in sync with upstream: currently based on [Navidrome v0.64.0](https://github.com/navidrome/navidrome/releases/tag/v0.64.0),
 merged in directly rather than maintained as a standalone patch set. Syncs happen periodically, not on a fixed
 schedule — check the [releases page](https://github.com/RFLundgren/navidrome_experimental/releases) for this fork's
 own tagged checkpoints (e.g. `v0.63.2-experimental.3`), which pin the exact upstream baseline plus the fork-specific
@@ -197,14 +200,24 @@ in the same playlist, export it like any other. A checkmark shows which episodes
 tracked independently per user on multi-user servers — click it to mark (or unmark) an episode as listened
 yourself, for whenever you downloaded it and listened somewhere else entirely.
 
+### ⏯️ Resume where you left off, and "played" that actually means it *(develop only)*
+Position tracking reuses the exact same Subsonic bookmark mechanism (`createBookmark.view`/`getBookmarks.view`/
+`deleteBookmark.view`) that already works for songs — any client that already supports bookmarks gets episode
+resume support for free, no fork-specific endpoint required. And "played" finally means something: instead of
+firing the instant a stream starts, an episode is only marked played once you've actually reached roughly 90% of
+it, matching how real podcast apps treat completion instead of crediting a few seconds of accidental playback. The
+explicit listened/unlistened toggle above still works independent of position at any time, and OpenSubsonic clients
+get a `played` timestamp field on every episode reflecting exactly when that happened.
+
 ### 🔌 Real Subsonic API coverage, not a partial implementation
 `getPodcasts`, `getNewestPodcasts`, `createPodcastChannel`, `refreshPodcasts`, `deletePodcastChannel`/
 `deletePodcastEpisode`, `downloadPodcastEpisode`, `markPodcastEpisodeListened`/`markPodcastEpisodeUnlistened` are
 all real, spec-compliant endpoints — a client still needs its own UI to call them (subscribing, browsing episodes,
 etc. are new surface area, not something existing song-browsing screens do for free). Where it *does* piggyback on
 what's already there: once a client has an episode's ID, streaming and downloading it go through the exact same
-`stream.view`/`download.view` endpoints it already uses for
-songs — no separate playback path to build.
+`stream.view`/`download.view` endpoints it already uses for songs — no separate playback path to build, and
+`createBookmark.view`/`getBookmarks.view`/`deleteBookmark.view` now work for episodes the same way, which is what
+powers resume position above.
 
 ### 🎛️ Fine-grained control
 Personal toggle to hide the Podcasts section from your own sidebar if you don't use it (same mechanism as the
@@ -217,8 +230,8 @@ exact same feed on the same server. An admin can also revoke a specific user's a
     <img width="800" src=".github/screenshots/ss-personal-settings.png" alt="Personal settings, showing the Show Folder View and Show Podcasts toggles">
 </p>
 
-Full design writeup, including what's still on the roadmap (resume playback position, a cross-channel "up next"
-queue, OPML import/export), see [PODCAST_PLAN.md](PODCAST_PLAN.md).
+Full design writeup, including what's still on the roadmap (a cross-channel "up next" queue, OPML import/export),
+see [PODCAST_PLAN.md](PODCAST_PLAN.md).
 
 ## Physical Folder Browsing (Experimental)
 

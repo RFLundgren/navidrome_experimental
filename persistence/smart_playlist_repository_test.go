@@ -45,6 +45,23 @@ var _ = Describe("PlaylistRepository - Smart Playlists", func() {
 			})
 		})
 
+		Context("after an evaluation", func() {
+			It("stamps updated_at and evaluated_at with the same instant", func() {
+				newPls := model.Playlist{Name: "Evaluated", OwnerID: "userid", Rules: rules}
+				Expect(repo.Put(&newPls)).To(Succeed())
+				DeferCleanup(func() { _ = repo.Delete(newPls.ID) })
+
+				refreshed, err := repo.GetWithTracks(newPls.ID, true, false)
+				Expect(err).ToNot(HaveOccurred())
+
+				stored, err := repo.Get(newPls.ID)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(stored.EvaluatedAt).ToNot(BeNil())
+				Expect(stored.UpdatedAt).To(BeTemporally("==", *stored.EvaluatedAt))
+				Expect(refreshed.UpdatedAt).To(BeTemporally("==", stored.UpdatedAt))
+			})
+		})
+
 		Context("invalid rules", func() {
 			It("fails to Put it in the DB", func() {
 				rules = &criteria.Criteria{
@@ -55,6 +72,41 @@ var _ = Describe("PlaylistRepository - Smart Playlists", func() {
 				}
 				newPls := model.Playlist{Name: "Great!", OwnerID: "userid", Rules: rules}
 				Expect(repo.Put(&newPls)).To(MatchError(ContainSubstring("invalid criteria expression")))
+			})
+		})
+
+		Context("re-imported from disk", func() {
+			// The scanner re-imports every playlist in a touched folder, and a freshly parsed
+			// .nsp carries no counters — saving it must not wipe the ones already evaluated.
+			It("keeps the stored counters when a freshly parsed playlist is saved over it", func() {
+				rules = &criteria.Criteria{
+					Expression: criteria.All{
+						criteria.Contains{"title": "Antenna"},
+					},
+				}
+				pls := model.Playlist{Name: "Smart", OwnerID: "userid", Rules: rules, Path: "/music/smart.nsp", Sync: true}
+				Expect(repo.Put(&pls)).To(Succeed())
+				DeferCleanup(func() { _ = repo.Delete(pls.ID) })
+
+				evaluated, err := repo.GetWithTracks(pls.ID, true, false)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(evaluated.SongCount).To(BeNumerically(">", 0))
+
+				stored, err := repo.Get(pls.ID)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(stored.SongCount).To(Equal(evaluated.SongCount))
+
+				reimported := model.Playlist{
+					ID: pls.ID, Name: pls.Name, OwnerID: "userid", Rules: rules,
+					Path: pls.Path, Sync: true,
+				}
+				Expect(repo.Put(&reimported)).To(Succeed())
+
+				afterImport, err := repo.Get(pls.ID)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(afterImport.SongCount).To(Equal(stored.SongCount))
+				Expect(afterImport.Duration).To(Equal(stored.Duration))
+				Expect(afterImport.Size).To(Equal(stored.Size))
 			})
 		})
 

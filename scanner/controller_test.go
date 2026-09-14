@@ -5,7 +5,6 @@ import (
 
 	"github.com/navidrome/navidrome/conf/configtest"
 	"github.com/navidrome/navidrome/consts"
-	"github.com/navidrome/navidrome/core"
 	"github.com/navidrome/navidrome/core/artwork"
 	"github.com/navidrome/navidrome/core/metrics"
 	"github.com/navidrome/navidrome/core/playlists"
@@ -32,7 +31,7 @@ var _ = Describe("Controller", func() {
 			DeferCleanup(configtest.SetupConfig())
 			ds = &tests.MockDataStore{RealDS: persistence.New(db.Db())}
 			ds.MockedProperty = &tests.MockedPropertyRepo{}
-			ctrl = scanner.New(ctx, ds, artwork.NoopCacheWarmer(), events.NoopBroker(), playlists.NewPlaylists(ds, core.NewImageUploadService()), metrics.NewNoopInstance())
+			ctrl = scanner.New(ctx, ds, events.NoopBroker(), playlists.NewPlaylists(ds, artwork.NewUploader(ds)), metrics.NewNoopInstance())
 		})
 
 		It("includes last scan error", func() {
@@ -91,5 +90,15 @@ var _ = Describe("EffectiveFullScan", func() {
 	It("ignores interrupted full scans in untargeted libraries", func() {
 		targets := []model.ScanTarget{{LibraryID: 2, FolderPath: "."}}
 		Expect(scanner.EffectiveFullScan(context.Background(), ds, false, targets)).To(BeFalse())
+	})
+})
+
+var _ = Describe("GetInstance", func() {
+	It("returns the same controller to every caller", func() {
+		ds := &tests.MockDataStore{}
+		pls := playlists.NewPlaylists(ds, artwork.NewUploader(ds))
+		a := scanner.GetInstance(context.Background(), ds, events.NoopBroker(), pls, metrics.NewNoopInstance())
+		b := scanner.GetInstance(context.Background(), ds, events.NoopBroker(), pls, metrics.NewNoopInstance())
+		Expect(a).To(BeIdenticalTo(b))
 	})
 })

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"iter"
 	"os"
 	"slices"
 	"strings"
@@ -163,11 +162,24 @@ func NewArtistRepository(ctx context.Context, db dbx.Builder) model.ArtistReposi
 
 func roleFilter(_ string, role any) Sqlizer {
 	if role, ok := role.(string); ok {
-		if _, ok := model.AllRoles[role]; ok {
-			return Expr("JSON_EXTRACT(library_artist.stats, '$." + role + ".m') IS NOT NULL")
+		if safe, ok := sanitizeArtistStatsRole(role); ok && safe != "total" {
+			return Expr("JSON_EXTRACT(library_artist.stats, '$." + safe + ".m') IS NOT NULL")
 		}
 	}
 	return Eq{"1": 2}
+}
+
+// sanitizeArtistStatsRole allowlists values interpolated into JSON paths for artist
+// stats (filter and sort). "total" is the aggregate key stored by the scanner.
+// Unknown values must not reach SQL string concatenation.
+func sanitizeArtistStatsRole(role string) (string, bool) {
+	if role == "" || role == "total" {
+		return "total", true
+	}
+	if _, ok := model.AllRoles[role]; ok {
+		return role, true
+	}
+	return "", false
 }
 
 // artistLibraryIdFilter filters artists based on library access through the library_artist table
@@ -250,6 +262,7 @@ func (r *artistRepository) Get(id string) (*model.Artist, error) {
 		return nil, model.ErrNotFound
 	}
 	res := dba.toModels()
+	r.hydrateArtwork(res)
 	return &res[0], nil
 }
 
@@ -261,20 +274,37 @@ func (r *artistRepository) GetAll(options ...model.QueryOptions) (model.Artists,
 		return nil, err
 	}
 	res := dba.toModels()
+	r.hydrateArtwork(res)
 	return res, err
 }
 
+// getAllIDs returns just the artist IDs for the same row set as GetAll, skipping the
+// heavy stats columns and JSON post-processing.
+func (r *artistRepository) getAllIDs(options ...model.QueryOptions) ([]string, error) {
+	sq := r.applyLibraryFilterToArtistQuery(r.newSelect(options...).Columns("artist.id")).GroupBy("artist.id")
+	if filtersNeedAnnotation(sq) {
+		sq = r.withAnnotation(sq, "artist.id")
+	}
+	ids := []string{}
+	err := r.queryAllSlice(sq, &ids)
+	return ids, err
+}
+
+// hydrateArtwork fills each artist's ImageHash/ImageAbsent from one batched item_artwork lookup.
+func (r *artistRepository) hydrateArtwork(artists model.Artists) {
+	hydrateItems(r.ctx, r.db, model.KindArtistArtwork, artists,
+		func(a *model.Artist) (string, *model.ItemImage) { return a.ID, &a.ItemImage })
+}
+
 func (r *artistRepository) GetCursor(options ...model.QueryOptions) (model.ArtistCursor, error) {
-	sel := r.selectArtist(options...)
-	cursor, err := queryWithStableResults[dbArtist](r.sqlRepository, sel)
+	ids, err := r.getAllIDs(options...)
 	if err != nil {
 		return nil, err
 	}
-	return wrapArtistCursor(cursor), nil
-}
-
-func wrapArtistCursor(cursor iter.Seq2[dbArtist, error]) model.ArtistCursor {
-	return model.ArtistCursor(wrapCursor(cursor, func(a dbArtist) *model.Artist { return a.Artist }))
+	opts := chunkOptions(options, "artist.id")
+	return model.ArtistCursor(streamByIDs(ids, func(chunk []string) (model.Artists, error) {
+		return r.GetAll(opts(chunk))
+	})), nil
 }
 
 func (r *artistRepository) getIndexKey(a model.Artist) string {
@@ -635,7 +665,9 @@ func (r *artistRepository) Search(q string, options ...model.QueryOptions) (mode
 	if err != nil {
 		return nil, fmt.Errorf("searching artist %q: %w", q, err)
 	}
-	return res.toModels(), nil
+	artists := res.toModels()
+	r.hydrateArtwork(artists)
+	return artists, nil
 }
 
 // searchScope returns the library IDs the search must be restricted to, or nil to skip the filter
@@ -697,7 +729,9 @@ func (r *artistRepository) ReadAll(options ...rest.QueryOptions) (any, error) {
 	role := "total"
 	if len(options) > 0 {
 		if v, ok := options[0].Filters["role"].(string); ok {
-			role = v
+			if safe, ok := sanitizeArtistStatsRole(v); ok {
+				role = safe
+			}
 		}
 	}
 	r.sortMappings["song_count"] = "sum(stats->>'" + role + "'->>'m')"

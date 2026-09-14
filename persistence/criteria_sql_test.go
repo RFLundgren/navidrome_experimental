@@ -20,7 +20,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 
 	DescribeTable("expressions",
 		func(expr criteria.Expression, expectedSQL string, expectedArgs ...any) {
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -217,7 +217,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 			sqlizer, err := newSmartPlaylistCriteria(
 				criteria.Criteria{Expression: criteria.InPlaylist{"id": "deadbeef-dead-beef"}},
 				withSmartPlaylistOwner(model.User{ID: "owner-id", IsAdmin: false}),
-			).Where()
+			).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -230,7 +230,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 			sqlizer, err := newSmartPlaylistCriteria(
 				criteria.Criteria{Expression: criteria.InPlaylist{"id": "deadbeef-dead-beef"}},
 				withSmartPlaylistOwner(model.User{ID: "admin-id", IsAdmin: true}),
-			).Where()
+			).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -241,7 +241,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 	})
 
 	It("builds relative date expressions", func() {
-		sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheLast{"lastPlayed": 30}}).Where()
+		sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheLast{"lastPlayed": 30}}).where()
 		Expect(err).ToNot(HaveOccurred())
 
 		sql, args, err := sqlizer.ToSql()
@@ -251,7 +251,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 	})
 
 	It("builds negated relative date expressions", func() {
-		sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.NotInTheLast{"lastPlayed": 30}}).Where()
+		sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.NotInTheLast{"lastPlayed": 30}}).where()
 		Expect(err).ToNot(HaveOccurred())
 
 		sql, args, err := sqlizer.ToSql()
@@ -261,33 +261,33 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 	})
 
 	It("returns an error for unknown fields", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.EndsWith{"unknown": "value"}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.EndsWith{"unknown": "value"}}).where()
 
 		Expect(err).To(MatchError("invalid field in criteria: unknown"))
 	})
 
 	It("returns an error when isMissing is used with a regular field", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.IsMissing{"year": true}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.IsMissing{"year": true}}).where()
 		Expect(err).To(MatchError(ContainSubstring("isMissing/isPresent operator is not supported for field")))
 	})
 
 	It("returns an error when isPresent is used with a regular field", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.IsPresent{"title": true}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.IsPresent{"title": true}}).where()
 		Expect(err).To(MatchError(ContainSubstring("isMissing/isPresent operator is not supported for field")))
 	})
 
 	It("returns an error when isMissing has a non-boolean value", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.IsMissing{"genre": "hello"}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.IsMissing{"genre": "hello"}}).where()
 		Expect(err).To(MatchError(ContainSubstring("invalid boolean value for 'missing' expression")))
 	})
 
 	It("returns an error for a range over a tag/role field", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"rate": []int{1, 5}}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"rate": []int{1, 5}}}).where()
 		Expect(err).To(MatchError(ContainSubstring("range operator not supported for tag/role field")))
 	})
 
 	It("returns an error for a range over a user tag field", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"usertag": []int{1, 5}}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"usertag": []int{1, 5}}}).where()
 		Expect(err).To(MatchError(ContainSubstring("range operator not supported for tag/role field")))
 	})
 
@@ -297,7 +297,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 			sqlizer, err := newSmartPlaylistCriteria(
 				criteria.Criteria{Expression: criteria.Is{"usertag": "workout"}},
 				withSmartPlaylistOwner(owner),
-			).Where()
+			).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -308,54 +308,54 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 	})
 
 	It("returns a clear error for a malformed range value", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"playCount": []int{1, 2, 3}}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"playCount": []int{1, 2, 3}}}).where()
 		Expect(err).To(MatchError(ContainSubstring("must be a [min, max] pair")))
 	})
 
 	Describe("sort", func() {
 		It("sorts by regular fields", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "title"}).OrderBy()).To(Equal("media_file.title asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "title"}).orderBy()).To(Equal("media_file.title asc"))
 		})
 
 		It("sorts by tag fields", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "genre"}).OrderBy()).To(Equal("COALESCE(json_extract(media_file.tags, '$.genre[0].value'), '') asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "genre"}).orderBy()).To(Equal("COALESCE(json_extract(media_file.tags, '$.genre[0].value'), '') asc"))
 		})
 
 		It("sorts by role fields", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "artist"}).OrderBy()).To(Equal("COALESCE(json_extract(media_file.participants, '$.artist[0].name'), '') asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "artist"}).orderBy()).To(Equal("COALESCE(json_extract(media_file.participants, '$.artist[0].name'), '') asc"))
 		})
 
 		It("casts numeric tags when sorting", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "rate"}).OrderBy()).To(Equal("CAST(COALESCE(json_extract(media_file.tags, '$.rate[0].value'), '') AS REAL) asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "rate"}).orderBy()).To(Equal("CAST(COALESCE(json_extract(media_file.tags, '$.rate[0].value'), '') AS REAL) asc"))
 		})
 
 		It("sorts by albumtype alias", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "albumtype"}).OrderBy()).To(Equal("COALESCE(json_extract(media_file.tags, '$.releasetype[0].value'), '') asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "albumtype"}).orderBy()).To(Equal("COALESCE(json_extract(media_file.tags, '$.releasetype[0].value'), '') asc"))
 		})
 
 		It("sorts by random", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "random"}).OrderBy()).To(Equal("random() asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "random"}).orderBy()).To(Equal("random() asc"))
 		})
 
 		It("sorts by album columns bare, with no COALESCE default", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "-albumDateAdded,trackNumber"}).OrderBy()).
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "-albumDateAdded,trackNumber"}).orderBy()).
 				To(Equal("album.created_at desc, media_file.track_number asc"))
 		})
 
 		It("sorts by multiple fields", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "title,-rating"}).OrderBy()).To(Equal("media_file.title asc, COALESCE(annotation.rating, 0) desc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "title,-rating"}).orderBy()).To(Equal("media_file.title asc, COALESCE(annotation.rating, 0) desc"))
 		})
 
 		It("reverts order when order is desc", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "-date,artist", Order: "desc"}).OrderBy()).To(Equal("media_file.date asc, COALESCE(json_extract(media_file.participants, '$.artist[0].name'), '') desc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "-date,artist", Order: "desc"}).orderBy()).To(Equal("media_file.date asc, COALESCE(json_extract(media_file.participants, '$.artist[0].name'), '') desc"))
 		})
 
 		It("ignores invalid sort fields", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "bogus,title"}).OrderBy()).To(Equal("media_file.title asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "bogus,title"}).orderBy()).To(Equal("media_file.title asc"))
 		})
 
 		It("ignores usertag as a sort field (no single sortable value)", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "usertag,title"}).OrderBy()).To(Equal("media_file.title asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "usertag,title"}).orderBy()).To(Equal("media_file.title asc"))
 		})
 	})
 
@@ -400,7 +400,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Contains{"artist": "Kraftwerk"},
 				criteria.Contains{"artist": "Pink Floyd"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -414,7 +414,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Contains{"artist": "Beatles"},
 				criteria.Contains{"composer": "Lennon"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, _, err := sqlizer.ToSql()
@@ -429,7 +429,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.NotContains{"artist": "Beatles"},
 				criteria.NotContains{"artist": "Kraftwerk"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, _, err := sqlizer.ToSql()
@@ -444,7 +444,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 			for i := range anyExprs {
 				anyExprs[i] = criteria.Contains{"artist": fmt.Sprintf("Artist%d", i)}
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: anyExprs}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: anyExprs}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -462,7 +462,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Contains{"artist": "Beatles"},
 				criteria.Contains{"artist": "Kraftwerk"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -478,7 +478,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Contains{"genre": "Metal"},
 				criteria.Contains{"genre": "Punk"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -492,7 +492,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Contains{"genre": "Rock"},
 				criteria.Contains{"mood": "Happy"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, _, err := sqlizer.ToSql()
@@ -505,7 +505,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.NotContains{"genre": "Rock"},
 				criteria.NotContains{"genre": "Metal"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, _, err := sqlizer.ToSql()
@@ -520,7 +520,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Contains{"genre": "Rock"},
 				criteria.Contains{"genre": "Metal"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -537,7 +537,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.IsNot{"artist": "Beatles"},
 				criteria.IsNot{"artist": "Kraftwerk"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -553,7 +553,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.NotContains{"artist": "Beatles"},
 				criteria.NotContains{"artist": "Kraftwerk"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -568,7 +568,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.NotContains{"genre": "Rock"},
 				criteria.NotContains{"genre": "Metal"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -585,7 +585,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Contains{"artist": "Beatles"},
 				criteria.IsNot{"artist": "Kraftwerk"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, _, err := sqlizer.ToSql()
@@ -600,7 +600,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.IsNot{"artist": "Beatles"},
 				criteria.IsNot{"composer": "Lennon"},
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: expr}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, _, err := sqlizer.ToSql()
@@ -613,7 +613,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 			for i := range allExprs {
 				allExprs[i] = criteria.IsNot{"artist": fmt.Sprintf("Artist%d", i)}
 			}
-			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: allExprs}).Where()
+			sqlizer, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: allExprs}).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -629,14 +629,14 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 			c := criteria.Criteria{Expression: criteria.All{criteria.Contains{"title": "love"}}, Sort: "albumRating"}
 			cSQL := newSmartPlaylistCriteria(c)
 
-			Expect(cSQL.ExpressionJoins()).To(Equal(smartPlaylistJoinNone))
-			Expect(cSQL.RequiredJoins().has(smartPlaylistJoinAlbumAnnotation)).To(BeTrue())
+			Expect(cSQL.expressionJoins()).To(Equal(smartPlaylistJoinNone))
+			Expect(cSQL.requiredJoins().has(smartPlaylistJoinAlbumAnnotation)).To(BeTrue())
 		})
 
 		It("includes expression-based joins", func() {
 			c := criteria.Criteria{Expression: criteria.All{criteria.Gt{"albumRating": 3}}}
 
-			Expect(newSmartPlaylistCriteria(c).ExpressionJoins().has(smartPlaylistJoinAlbumAnnotation)).To(BeTrue())
+			Expect(newSmartPlaylistCriteria(c).expressionJoins().has(smartPlaylistJoinAlbumAnnotation)).To(BeTrue())
 		})
 
 		It("detects nested album and artist joins", func() {
@@ -645,7 +645,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 				criteria.Any{criteria.Gt{"artistPlayCount": 10}},
 			}}
 
-			joins := newSmartPlaylistCriteria(c).RequiredJoins()
+			joins := newSmartPlaylistCriteria(c).requiredJoins()
 			Expect(joins.has(smartPlaylistJoinAlbumAnnotation)).To(BeTrue())
 			Expect(joins.has(smartPlaylistJoinArtistAnnotation)).To(BeTrue())
 		})
@@ -653,20 +653,20 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 		It("detects join types from sort fields with direction prefixes", func() {
 			c := criteria.Criteria{Expression: criteria.All{criteria.Contains{"title": "love"}}, Sort: "-artistRating"}
 
-			Expect(newSmartPlaylistCriteria(c).RequiredJoins().has(smartPlaylistJoinArtistAnnotation)).To(BeTrue())
+			Expect(newSmartPlaylistCriteria(c).requiredJoins().has(smartPlaylistJoinArtistAnnotation)).To(BeTrue())
 		})
 
 		It("keeps a sort-only album join out of the expression joins", func() {
 			c := criteria.Criteria{Expression: criteria.All{criteria.Contains{"title": "love"}}, Sort: "-albumDateAdded"}
 			cSQL := newSmartPlaylistCriteria(c)
 
-			Expect(cSQL.ExpressionJoins()).To(Equal(smartPlaylistJoinNone))
-			Expect(cSQL.RequiredJoins().has(smartPlaylistJoinAlbum)).To(BeTrue())
+			Expect(cSQL.expressionJoins()).To(Equal(smartPlaylistJoinNone))
+			Expect(cSQL.requiredJoins().has(smartPlaylistJoinAlbum)).To(BeTrue())
 		})
 
 		It("distinguishes the album join from the album annotation join", func() {
 			c := criteria.Criteria{Expression: criteria.All{criteria.Gt{"albumRating": 3}}}
-			joins := newSmartPlaylistCriteria(c).RequiredJoins()
+			joins := newSmartPlaylistCriteria(c).requiredJoins()
 
 			Expect(joins.has(smartPlaylistJoinAlbumAnnotation)).To(BeTrue())
 			Expect(joins.has(smartPlaylistJoinAlbum)).To(BeFalse())

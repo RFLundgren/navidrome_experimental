@@ -44,3 +44,10 @@ PODCAST_CLIENT_INTEGRATION.md
 FOLDER_CLIENT_INTEGRATION.md
 private_beta_testing.md
 .playwright-mcp/
+
+# Temp benchmark files
+zz_*_test.go
+
+# wazero compilation cache for the plugins test suite
+/plugins/testdata/.wazero-cache/
+/plugins/testdata/*.stage/
