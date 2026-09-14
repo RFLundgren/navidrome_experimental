@@ -302,6 +302,45 @@ func (r *mediaFileRepository) GetAll(options ...model.QueryOptions) (model.Media
 	return res.toModels(), nil
 }
 
+// GetBookmarks returns the current user's own bookmarked tracks. Built from the generic
+// bookmarkedItemIDs/bookmarksByID helpers (sql_bookmarks.go) plus this repository's own typed
+// GetAll, rather than a single hardcoded query, so the same pattern also works for other
+// bookmarkable types (see podcastEpisodeRepository.GetBookmarks).
+func (r *mediaFileRepository) GetBookmarks() (model.Bookmarks, error) {
+	ids, err := r.bookmarkedItemIDs()
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return model.Bookmarks{}, nil
+	}
+	mfs, err := r.GetAll(model.QueryOptions{Filters: Eq{"media_file.id": ids}})
+	if err != nil {
+		return nil, err
+	}
+	byID, err := r.bookmarksByID(ids)
+	if err != nil {
+		return nil, err
+	}
+	resp := make(model.Bookmarks, 0, len(mfs))
+	for _, mf := range mfs {
+		bmk, ok := byID[mf.ID]
+		if !ok {
+			log.Debug(r.ctx, "Invalid bookmark", "id", mf.ID)
+			continue
+		}
+		resp = append(resp, model.Bookmark{
+			Comment:   bmk.Comment,
+			Position:  bmk.Position,
+			CreatedAt: bmk.CreatedAt,
+			UpdatedAt: bmk.UpdatedAt,
+			ChangedBy: bmk.ChangedBy,
+			Item:      mf,
+		})
+	}
+	return resp, nil
+}
+
 // GetRandom uses two passes so the random sort runs over a narrow rowid index instead of the
 // wide media_file row: pick random rowids first, then hydrate only those.
 func (r *mediaFileRepository) GetRandom(options ...model.QueryOptions) (model.MediaFiles, error) {

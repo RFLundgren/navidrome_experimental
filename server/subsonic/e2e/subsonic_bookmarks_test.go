@@ -64,6 +64,70 @@ var _ = Describe("Bookmark and PlayQueue Endpoints", Ordered, func() {
 		})
 	})
 
+	// Bookmarks on a podcast episode exercise the same generic bookmark mechanism as a song, but
+	// through a different repository - the regression coverage for decoupling bookmarks from
+	// MediaFile. Episodes are seeded directly against the datastore (bypassing an actual RSS
+	// fetch) the same way createUser seeds users directly, rather than going through
+	// createPodcastChannel.view.
+	Describe("Podcast Episode Bookmark Endpoints", Ordered, func() {
+		var trackID, episodeID string
+
+		BeforeAll(func() {
+			mfs, err := ds.MediaFile(ctx).GetAll(model.QueryOptions{Max: 1})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mfs).ToNot(BeEmpty())
+			trackID = mfs[0].ID
+
+			channel := &model.PodcastChannel{Url: "https://example.com/e2e-feed.xml", Title: "E2E Test Feed"}
+			Expect(ds.PodcastChannel(ctx).Put(channel)).To(Succeed())
+
+			episode := &model.PodcastEpisode{ChannelID: channel.ID, Title: "E2E Episode", Guid: "e2e-guid-1", Duration: 600}
+			Expect(ds.PodcastEpisode(ctx).Put(episode)).To(Succeed())
+			episodeID = episode.ID
+		})
+
+		It("getBookmarks returns both a song and a podcast episode bookmark, correctly typed", func() {
+			Expect(doReq("createBookmark", "id", trackID, "position", "1000", "comment", "song bookmark").Status).To(Equal(responses.StatusOK))
+			Expect(doReq("createBookmark", "id", episodeID, "position", "30000", "comment", "episode bookmark").Status).To(Equal(responses.StatusOK))
+
+			resp := doReq("getBookmarks")
+			Expect(resp.Status).To(Equal(responses.StatusOK))
+			Expect(resp.Bookmarks).ToNot(BeNil())
+			Expect(resp.Bookmarks.Bookmark).To(HaveLen(2))
+
+			byID := map[string]responses.Bookmark{}
+			for _, bmk := range resp.Bookmarks.Bookmark {
+				byID[bmk.Entry.Id] = bmk
+			}
+			Expect(byID[trackID].Comment).To(Equal("song bookmark"))
+			Expect(byID[episodeID].Comment).To(Equal("episode bookmark"))
+			Expect(byID[episodeID].Entry.Title).To(Equal("E2E Episode"))
+			Expect(byID[episodeID].Position).To(Equal(int64(30000)))
+
+			Expect(doReq("deleteBookmark", "id", trackID).Status).To(Equal(responses.StatusOK))
+			Expect(doReq("deleteBookmark", "id", episodeID).Status).To(Equal(responses.StatusOK))
+			Expect(doReq("getBookmarks").Bookmarks.Bookmark).To(BeEmpty())
+		})
+
+		It("reports the episode played only once position crosses the completion threshold", func() {
+			ep, err := ds.PodcastEpisode(ctx).Get(episodeID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ep.PlayCount).To(Equal(int64(0)), "episode should not start out already played")
+
+			Expect(doReq("createBookmark", "id", episodeID, "position", "5000").Status).To(Equal(responses.StatusOK))
+			ep, err = ds.PodcastEpisode(ctx).Get(episodeID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ep.PlayCount).To(Equal(int64(0)), "a position far short of the episode's duration must not count as a play")
+
+			Expect(doReq("createBookmark", "id", episodeID, "position", "550000").Status).To(Equal(responses.StatusOK)) // ~92% of 600s
+			ep, err = ds.PodcastEpisode(ctx).Get(episodeID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ep.PlayCount).To(Equal(int64(1)), "crossing the completion threshold should mark the episode played")
+
+			Expect(doReq("deleteBookmark", "id", episodeID).Status).To(Equal(responses.StatusOK))
+		})
+	})
+
 	Describe("PlayQueue Endpoints", Ordered, func() {
 		var trackIDs []string
 

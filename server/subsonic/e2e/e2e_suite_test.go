@@ -24,6 +24,7 @@ import (
 	"github.com/navidrome/navidrome/core/metrics"
 	"github.com/navidrome/navidrome/core/playback"
 	"github.com/navidrome/navidrome/core/playlists"
+	"github.com/navidrome/navidrome/core/podcasts"
 	"github.com/navidrome/navidrome/core/scrobbler"
 	"github.com/navidrome/navidrome/core/storage/storagetest"
 	"github.com/navidrome/navidrome/core/stream"
@@ -439,7 +440,7 @@ func setupTestDB() {
 		lyrics.NewLyrics(ds, nil),
 		decider,
 		nil,
-		nil,
+		podcasts.New(ds, events.NoopBroker()),
 		nil,
 	)
 }

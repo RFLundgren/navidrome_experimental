@@ -19,6 +19,95 @@ func newTestPodcasts() (*podcasts, *tests.MockedPodcastChannelRepo, *tests.Mocke
 	return New(ds, nil).(*podcasts), channelRepo, subRepo
 }
 
+func newTestPodcastsWithEpisode(episode *model.PodcastEpisode) (*podcasts, *tests.MockedPodcastEpisodeRepo) {
+	ds := &tests.MockDataStore{}
+	ds.MockedPodcastChannel = tests.CreateMockedPodcastChannelRepo()
+	ds.MockedPodcastSubscription = tests.CreateMockedPodcastSubscriptionRepo()
+	episodeRepo := tests.CreateMockedPodcastEpisodeRepo()
+	episodeRepo.Data[episode.ID] = episode
+	ds.MockedPodcastEpisode = episodeRepo
+	return New(ds, nil).(*podcasts), episodeRepo
+}
+
+// A position short of the completion threshold must not count as a play - the whole point of
+// switching away from the old "mark listened the instant streaming starts" behavior.
+func TestRecordEpisodePositionBelowThresholdDoesNotMarkListened(t *testing.T) {
+	episode := &model.PodcastEpisode{ID: "ep-1", Duration: 600} // 10 minutes
+	svc, episodeRepo := newTestPodcastsWithEpisode(episode)
+	ctx := request.WithUser(context.Background(), model.User{ID: "user-1"})
+
+	justCompleted, err := svc.RecordEpisodePosition(ctx, episode.ID, 5000) // 5s in
+	if err != nil {
+		t.Fatalf("RecordEpisodePosition returned error: %v", err)
+	}
+	if justCompleted {
+		t.Fatalf("expected justCompleted=false for a position far short of the episode's duration")
+	}
+	if episodeRepo.Data[episode.ID].PlayCount != 0 {
+		t.Fatalf("expected PlayCount to remain 0, got %d", episodeRepo.Data[episode.ID].PlayCount)
+	}
+}
+
+// A position crossing the completion threshold marks the episode listened, and reports
+// justCompleted=true so the caller knows to fire any completion-triggered side effects.
+func TestRecordEpisodePositionAtThresholdMarksListened(t *testing.T) {
+	episode := &model.PodcastEpisode{ID: "ep-1", Duration: 600} // 10 minutes = 600,000ms
+	svc, episodeRepo := newTestPodcastsWithEpisode(episode)
+	ctx := request.WithUser(context.Background(), model.User{ID: "user-1"})
+
+	justCompleted, err := svc.RecordEpisodePosition(ctx, episode.ID, 550000) // ~92%
+	if err != nil {
+		t.Fatalf("RecordEpisodePosition returned error: %v", err)
+	}
+	if !justCompleted {
+		t.Fatalf("expected justCompleted=true once position crosses the completion threshold")
+	}
+	if episodeRepo.Data[episode.ID].PlayCount != 1 {
+		t.Fatalf("expected PlayCount=1, got %d", episodeRepo.Data[episode.ID].PlayCount)
+	}
+}
+
+// Repeated position reports past the threshold (e.g. the client keeps sending updates as the
+// episode finishes) must not keep incrementing PlayCount or keep reporting justCompleted.
+func TestRecordEpisodePositionIsIdempotentOnceListened(t *testing.T) {
+	episode := &model.PodcastEpisode{ID: "ep-1", Duration: 600}
+	svc, episodeRepo := newTestPodcastsWithEpisode(episode)
+	ctx := request.WithUser(context.Background(), model.User{ID: "user-1"})
+
+	if _, err := svc.RecordEpisodePosition(ctx, episode.ID, 550000); err != nil {
+		t.Fatalf("first RecordEpisodePosition returned error: %v", err)
+	}
+	justCompleted, err := svc.RecordEpisodePosition(ctx, episode.ID, 590000)
+	if err != nil {
+		t.Fatalf("second RecordEpisodePosition returned error: %v", err)
+	}
+	if justCompleted {
+		t.Fatalf("expected justCompleted=false on a repeat report after the episode is already listened")
+	}
+	if episodeRepo.Data[episode.ID].PlayCount != 1 {
+		t.Fatalf("expected PlayCount to stay at 1, got %d", episodeRepo.Data[episode.ID].PlayCount)
+	}
+}
+
+// An episode with no known duration (some feeds omit <itunes:duration>) can't have a completion
+// ratio computed - position reports must never mark it listened.
+func TestRecordEpisodePositionSkipsUnknownDuration(t *testing.T) {
+	episode := &model.PodcastEpisode{ID: "ep-1", Duration: 0}
+	svc, episodeRepo := newTestPodcastsWithEpisode(episode)
+	ctx := request.WithUser(context.Background(), model.User{ID: "user-1"})
+
+	justCompleted, err := svc.RecordEpisodePosition(ctx, episode.ID, 999999999)
+	if err != nil {
+		t.Fatalf("RecordEpisodePosition returned error: %v", err)
+	}
+	if justCompleted {
+		t.Fatalf("expected justCompleted=false for an episode with unknown duration")
+	}
+	if episodeRepo.Data[episode.ID].PlayCount != 0 {
+		t.Fatalf("expected PlayCount to remain 0, got %d", episodeRepo.Data[episode.ID].PlayCount)
+	}
+}
+
 // A non-admin subscriber subscribing to a feed that some other user already subscribes to must
 // reuse the existing shared channel row, not create a second one - the whole point of the shared-
 // channel model is that a feed is only ever fetched/stored once regardless of subscriber count.

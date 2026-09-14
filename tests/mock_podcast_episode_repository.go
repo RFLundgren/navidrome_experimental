@@ -2,6 +2,7 @@ package tests
 
 import (
 	"errors"
+	"time"
 
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/model/id"
@@ -121,4 +122,54 @@ func (m *MockedPodcastEpisodeRepo) GetDownloadedForUser(_, channelID string) (mo
 		}
 	}
 	return res, nil
+}
+
+func (m *MockedPodcastEpisodeRepo) IncPlayCount(itemID string, ts time.Time) error {
+	if m.Err {
+		return errors.New("error")
+	}
+	if e, ok := m.Data[itemID]; ok {
+		e.PlayCount++
+		e.PlayDate = &ts
+	}
+	return nil
+}
+
+func (m *MockedPodcastEpisodeRepo) ResetPlayCount(itemID string) error {
+	if m.Err {
+		return errors.New("error")
+	}
+	if e, ok := m.Data[itemID]; ok {
+		e.PlayCount = 0
+		e.PlayDate = nil
+	}
+	return nil
+}
+
+func (m *MockedPodcastEpisodeRepo) AddBookmark(id, comment string, position int64) error {
+	if m.Err {
+		return errors.New("error")
+	}
+	return nil
+}
+
+func (m *MockedPodcastEpisodeRepo) DeleteBookmark(id string) error {
+	if m.Err {
+		return errors.New("error")
+	}
+	return nil
+}
+
+func (m *MockedPodcastEpisodeRepo) GetBookmarks() (model.Bookmarks, error) {
+	if m.Err {
+		return nil, errors.New("error")
+	}
+	return model.Bookmarks{}, nil
+}
+
+func (m *MockedPodcastEpisodeRepo) CleanBookmarks() error {
+	if m.Err {
+		return errors.New("error")
+	}
+	return nil
 }

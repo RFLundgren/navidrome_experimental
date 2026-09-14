@@ -1,10 +1,12 @@
 package subsonic
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
 
+	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/model/request"
 	"github.com/navidrome/navidrome/server/subsonic/responses"
@@ -13,26 +15,44 @@ import (
 )
 
 func (api *Router) GetBookmarks(r *http.Request) (*responses.Subsonic, error) {
-	user, _ := request.UserFrom(r.Context())
+	ctx := r.Context()
+	user, _ := request.UserFrom(ctx)
 
-	repo := api.ds.MediaFile(r.Context())
-	bookmarks, err := repo.GetBookmarks()
+	songBookmarks, err := api.ds.MediaFile(ctx).GetBookmarks()
+	if err != nil {
+		return nil, err
+	}
+	episodeBookmarks, err := api.ds.PodcastEpisode(ctx).GetBookmarks()
 	if err != nil {
 		return nil, err
 	}
 
 	response := newResponse()
 	response.Bookmarks = &responses.Bookmarks{}
-	response.Bookmarks.Bookmark = slice.Map(bookmarks, func(bmk model.Bookmark) responses.Bookmark {
-		return responses.Bookmark{
-			Entry:    childFromMediaFile(r.Context(), bmk.Item),
+	response.Bookmarks.Bookmark = make([]responses.Bookmark, 0, len(songBookmarks)+len(episodeBookmarks))
+	for _, bmk := range append(songBookmarks, episodeBookmarks...) {
+		var entry responses.Child
+		switch item := bmk.Item.(type) {
+		case model.MediaFile:
+			entry = childFromMediaFile(ctx, item)
+		case model.PodcastEpisode:
+			entry, err = childFromPodcastEpisode(ctx, api.ds, item)
+			if err != nil {
+				log.Warn(ctx, "Error building bookmark entry for podcast episode", "id", item.ID, err)
+				continue
+			}
+		default:
+			continue
+		}
+		response.Bookmarks.Bookmark = append(response.Bookmarks.Bookmark, responses.Bookmark{
+			Entry:    entry,
 			Position: bmk.Position,
 			Username: user.UserName,
 			Comment:  bmk.Comment,
 			Created:  bmk.CreatedAt,
 			Changed:  bmk.UpdatedAt,
-		}
-	})
+		})
+	}
 	return response, nil
 }
 
@@ -46,10 +66,19 @@ func (api *Router) CreateBookmark(r *http.Request) (*responses.Subsonic, error) 
 	comment, _ := p.String("comment")
 	position := p.Int64Or("position", 0)
 
-	repo := api.ds.MediaFile(r.Context())
-	err = repo.AddBookmark(id, comment, position)
+	ctx := r.Context()
+	entity, repo, err := api.resolveBookmarkable(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if err := repo.AddBookmark(id, comment, position); err != nil {
+		return nil, err
+	}
+
+	if episode, ok := entity.(model.PodcastEpisode); ok {
+		if err := api.recordEpisodePosition(r, episode, position); err != nil {
+			log.Warn(ctx, "Error recording podcast episode position", "id", id, err)
+		}
 	}
 	return newResponse(), nil
 }
@@ -61,12 +90,30 @@ func (api *Router) DeleteBookmark(r *http.Request) (*responses.Subsonic, error) 
 		return nil, err
 	}
 
-	repo := api.ds.MediaFile(r.Context())
-	err = repo.DeleteBookmark(id)
+	ctx := r.Context()
+	_, repo, err := api.resolveBookmarkable(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	if err := repo.DeleteBookmark(id); err != nil {
+		return nil, err
+	}
 	return newResponse(), nil
+}
+
+// resolveBookmarkable finds which bookmarkable repository owns id - a song or a podcast episode
+// today - and returns both the loaded entity (so a caller with type-specific follow-up work, like
+// podcast completion detection, doesn't need a second lookup) and the repository to bookmark it
+// through. IDs carry no embedded type marker (see model/get_entity.go), so this tries each
+// bookmarkable type's Get in turn.
+func (api *Router) resolveBookmarkable(ctx context.Context, id string) (any, model.BookmarkableRepository, error) {
+	if mf, err := api.ds.MediaFile(ctx).Get(id); err == nil {
+		return *mf, api.ds.MediaFile(ctx), nil
+	}
+	if ep, err := api.ds.PodcastEpisode(ctx).Get(id); err == nil {
+		return *ep, api.ds.PodcastEpisode(ctx), nil
+	}
+	return nil, nil, model.ErrNotFound
 }
 
 func (api *Router) GetPlayQueue(r *http.Request) (*responses.Subsonic, error) {
