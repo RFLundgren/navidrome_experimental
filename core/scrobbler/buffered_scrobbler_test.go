@@ -253,8 +253,8 @@ func TestBufferedScrobblerTakesTheLongestServerDelayAcrossUsers(t *testing.T) {
 		}}
 		// Both are buffered before the drain goroutine exists: it drains once on startup, and
 		// seeing only one user there would park it on that user's delay, ignoring the other.
-		_ = buffer.Enqueue("test", "user1", "1", time.Now())
-		_ = buffer.Enqueue("test", "user2", "2", time.Now())
+		_ = buffer.Enqueue("test", "user1", "1", time.Now(), "", "", "", "")
+		_ = buffer.Enqueue("test", "user2", "2", time.Now(), "", "", "", "")
 		bs := newBufferedScrobbler(ds, scr, "test")
 		defer bs.Stop()
 

@@ -6,7 +6,10 @@ import { ThemeProvider, createTheme } from '@material-ui/core/styles'
 import { AlbumContextMenu, ArtistContextMenu } from './ContextMenus'
 
 const mockDispatch = vi.fn()
-vi.mock('react-redux', () => ({ useDispatch: () => mockDispatch }))
+vi.mock('react-redux', () => ({
+  useDispatch: () => mockDispatch,
+  useSelector: (selector) => selector({ settings: { showFolderView: true } }),
+}))
 
 const { mockConfig } = vi.hoisted(() => ({
   mockConfig: {

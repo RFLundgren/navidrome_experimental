@@ -970,8 +970,8 @@ var _ = Describe("MediaRepository", func() {
 			ctx := request.WithUser(log.NewContext(context.TODO()), model.User{ID: "userid"})
 			scrobbles := NewScrobbleRepository(ctx, GetDBXBuilder())
 			buffer := NewScrobbleBufferRepository(ctx, GetDBXBuilder())
-			Expect(scrobbles.RecordScrobble(prev.ID, time.Now())).To(Succeed())
-			Expect(buffer.Enqueue("lastfm", "userid", prev.ID, time.Now())).To(Succeed())
+			Expect(scrobbles.RecordScrobble(prev.ID, time.Now(), "", "", "", "")).To(Succeed())
+			Expect(buffer.Enqueue("lastfm", "userid", prev.ID, time.Now(), "", "", "", "")).To(Succeed())
 
 			Expect(mr.ReassignReferences(prev.ID, next.ID)).To(Succeed())
 			Expect(mr.Delete(prev.ID)).To(Succeed())

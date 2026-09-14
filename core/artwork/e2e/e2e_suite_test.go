@@ -63,10 +63,10 @@ func runWorkerUntil(ctx context.Context, worker *artwork.Worker, until func() bo
 
 type fakeFolderRepo struct {
 	model.FolderRepository
-	result []model.Folder
+	result model.Folders
 }
 
-func (f *fakeFolderRepo) GetAll(...model.QueryOptions) ([]model.Folder, error) { return f.result, nil }
+func (f *fakeFolderRepo) GetAll(...model.QueryOptions) (model.Folders, error) { return f.result, nil }
 
 func (f *fakeFolderRepo) HasAudioOutsideFolders(model.Folder, []string) (bool, error) {
 	return false, nil

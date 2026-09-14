@@ -86,7 +86,7 @@ func (s *osDirStorage) FS() (storage.MusicFS, error) {
 // answers as an unremarkable library does; the fields drive the album-root lookup and its failures.
 type fakeFolderRepo struct {
 	model.FolderRepository
-	result       []model.Folder
+	result       model.Folders
 	err          error
 	parentResult *model.Folder
 	getErr       error
@@ -97,7 +97,7 @@ type fakeFolderRepo struct {
 	otherAudioErr error
 }
 
-func (f *fakeFolderRepo) GetAll(...model.QueryOptions) ([]model.Folder, error) {
+func (f *fakeFolderRepo) GetAll(...model.QueryOptions) (model.Folders, error) {
 	return f.result, f.err
 }
 

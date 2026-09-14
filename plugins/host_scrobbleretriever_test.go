@@ -98,13 +98,13 @@ var _ = Describe("Scrobble Retriever Host Function", Ordered, func() {
 		scrobbleCtx := request.WithUser(GinkgoT().Context(), model.User{ID: "admin1", UserName: "adminuser"})
 
 		scrobbleRepo := dataStore.Scrobble(scrobbleCtx)
-		err = scrobbleRepo.RecordScrobble("1", time.Unix(0, 0))
+		err = scrobbleRepo.RecordScrobble("1", time.Unix(0, 0), "", "", "", "")
 		Expect(err).To(BeNil())
-		err = scrobbleRepo.RecordScrobble("2", time.Unix(1, 0))
+		err = scrobbleRepo.RecordScrobble("2", time.Unix(1, 0), "", "", "", "")
 		Expect(err).To(BeNil())
-		err = scrobbleRepo.RecordScrobble("3", time.Unix(2, 0))
+		err = scrobbleRepo.RecordScrobble("3", time.Unix(2, 0), "", "", "", "")
 		Expect(err).To(BeNil())
-		err = scrobbleRepo.RecordScrobble("1", time.Unix(2, 0))
+		err = scrobbleRepo.RecordScrobble("1", time.Unix(2, 0), "", "", "", "")
 		Expect(err).To(BeNil())
 
 		// Create and configure manager
@@ -303,7 +303,7 @@ var _ = Describe("Scrobble Retriever Host Function", Ordered, func() {
 			scrobbleRepo := dataStore.Scrobble(scrobbleCtx)
 
 			for i := range 5 {
-				err := scrobbleRepo.RecordScrobble("3", time.Unix(100, 0))
+				err := scrobbleRepo.RecordScrobble("3", time.Unix(100, 0), "", "", "", "")
 				Expect(err).To(BeNil())
 
 				scrobble := host.ScrobbleRef{ID: 5 + int64(i), MediaFileID: "3", SubmissionTime: 100}

@@ -23,6 +23,7 @@ import (
 	"github.com/navidrome/navidrome/core/metrics"
 	"github.com/navidrome/navidrome/core/playback"
 	"github.com/navidrome/navidrome/core/playlists"
+	"github.com/navidrome/navidrome/core/podcasts"
 	"github.com/navidrome/navidrome/core/scrobbler"
 	_ "github.com/navidrome/navidrome/core/storage/local" // registers the "file" storage scheme
 	"github.com/navidrome/navidrome/core/stream"
@@ -258,6 +259,7 @@ func buildArtworkRouter(art artwork.Artwork) *subsonic.Router {
 		events.NoopBroker(), playlists.NewPlaylists(ds, artwork.NewUploader(ds)),
 		scrobbler.NewPlayTracker(ds, events.NoopBroker(), nil), core.NewShare(ds),
 		playback.PlaybackServer(nil), metrics.NewNoopInstance(), lyrics.NewLyrics(ds, nil), decider, nil,
+		podcasts.New(ds, events.NoopBroker()), nil,
 	)
 }
 

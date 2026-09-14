@@ -287,7 +287,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 	})
 
 	It("returns an error for a range over a user tag field", func() {
-		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"usertag": []int{1, 5}}}).Where()
+		_, err := newSmartPlaylistCriteria(criteria.Criteria{Expression: criteria.InTheRange{"usertag": []int{1, 5}}}).where()
 		Expect(err).To(MatchError(ContainSubstring("range operator not supported for tag/role field")))
 	})
 
@@ -297,7 +297,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 			sqlizer, err := newSmartPlaylistCriteria(
 				criteria.Criteria{Expression: criteria.Is{"usertag": "workout"}},
 				withSmartPlaylistOwner(owner),
-			).Where()
+			).where()
 			Expect(err).ToNot(HaveOccurred())
 
 			sql, args, err := sqlizer.ToSql()
@@ -355,7 +355,7 @@ var _ = Describe("Smart playlist criteria SQL", func() {
 		})
 
 		It("ignores usertag as a sort field (no single sortable value)", func() {
-			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "usertag,title"}).OrderBy()).To(Equal("media_file.title asc"))
+			Expect(newSmartPlaylistCriteria(criteria.Criteria{Sort: "usertag,title"}).orderBy()).To(Equal("media_file.title asc"))
 		})
 	})
 
