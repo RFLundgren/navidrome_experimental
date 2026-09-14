@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -72,6 +73,7 @@ type configOptions struct {
 	Matcher                         matcherOptions `json:",omitzero"`
 	RecentlyAddedByModTime          bool
 	PreferSortTags                  bool
+	EnableNaturalSorting            bool
 	IgnoredArticles                 string
 	IndexGroups                     string
 	FFmpegPath                      string
@@ -90,6 +92,7 @@ type configOptions struct {
 	EnableUserEditing               bool
 	EnableArtworkUpload             bool
 	MaxImageUploadSize              string
+	MaxImageSize                    string
 	EnableSharing                   bool
 	ShareURL                        string
 	DefaultShareExpiration          time.Duration
@@ -145,6 +148,8 @@ type configOptions struct {
 	DevArtworkThrottleBacklogLimit    int
 	DevArtworkThrottleBacklogTimeout  time.Duration
 	DevArtworkThrottleBuffered        bool
+	DevArtworkWorkerConcurrency       int
+	DevArtworkExternalMaxRPS          int
 	DevArtistInfoTimeToLive           time.Duration
 	DevAlbumInfoTimeToLive            time.Duration
 	DevExternalScanner                bool
@@ -320,6 +325,12 @@ var currentGOOS = func() string {
 	return runtime.GOOS
 }
 
+// TLSEnabled reports whether the server serves HTTPS. Both halves are required,
+// so callers cannot infer it from the certificate alone.
+func (c *configOptions) TLSEnabled() bool {
+	return c.TLSCert != "" && c.TLSKey != ""
+}
+
 var (
 	Server = &configOptions{}
 	hooks  []func()
@@ -348,6 +359,13 @@ func LoadFromFile(confFile string) {
 		logFatal("Error reading config file:", err)
 	}
 	Load(true)
+}
+
+func durationNonNegativeOrDefault(val *time.Duration, original time.Duration) {
+	if val.Nanoseconds() < 0 {
+		log.Warn("Duration is a negative value. Using default value", "value", *val, "default", original)
+		*val = original
+	}
 }
 
 func Load(noConfigDump bool) {
@@ -403,7 +421,7 @@ func Load(noConfigDump bool) {
 		if mkErr := os.MkdirAll(filepath.Dir(Server.LogFile), os.ModePerm); mkErr != nil {
 			logFatal(fmt.Sprintf("Error creating log file directory: %s", mkErr.Error()))
 		}
-		out, err = os.OpenFile(Server.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		out, err = os.OpenFile(Server.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			logFatal(fmt.Sprintf("Error opening log file %s: %s", Server.LogFile, err.Error()))
 		}
@@ -421,6 +439,20 @@ func Load(noConfigDump bool) {
 	log.SetLogSourceLine(Server.DevLogSourceLine)
 	log.SetRedacting(Server.EnableLogRedacting)
 
+	durationNonNegativeOrDefault(&Server.SessionTimeout, consts.DefaultSessionTimeout)
+	durationNonNegativeOrDefault(&Server.SmartPlaylistRefreshDelay, consts.DefaultSmartRefresh)
+	durationNonNegativeOrDefault(&Server.DefaultShareExpiration, consts.DefaultShareExpiration)
+	durationNonNegativeOrDefault(&Server.UIPlaybackReportInterval, consts.DefaultUIPlaybackReportInterval)
+	durationNonNegativeOrDefault(&Server.AuthWindowLength, consts.DefaultAuthWindowLength)
+	durationNonNegativeOrDefault(&Server.Scanner.WatcherWait, consts.DefaultWatcherWait)
+
+	durationNonNegativeOrDefault(&Server.DevActivityPanelUpdateRate, consts.DefaultActivityPanelUpdateRate)
+	durationNonNegativeOrDefault(&Server.DevArtworkThrottleBacklogTimeout, consts.RequestThrottleBacklogTimeout)
+	durationNonNegativeOrDefault(&Server.DevArtistInfoTimeToLive, consts.ArtistInfoTimeToLive)
+	durationNonNegativeOrDefault(&Server.DevAlbumInfoTimeToLive, consts.AlbumInfoTimeToLive)
+	durationNonNegativeOrDefault(&Server.DevInsightsInitialDelay, consts.InsightsInitialDelay)
+	durationNonNegativeOrDefault(&Server.DevPluginCompilationTimeout, consts.DefaultPluginCompilationTimeout)
+
 	// Log deprecated, removed and unknown options
 	for _, o := range deprecatedOptions {
 		logDeprecatedOptions(o.name, o.replacement)
@@ -434,7 +466,8 @@ func Load(noConfigDump bool) {
 		validateBackupSchedule,
 		validatePlaylistsPath,
 		validatePurgeMissingOption,
-		validateMaxImageUploadSize,
+		validateByteSize("MaxImageUploadSize", Server.MaxImageUploadSize),
+		validateByteSize("MaxImageSize", Server.MaxImageSize),
 		validateURL("ExtAuth.LogoutURL", Server.ExtAuth.LogoutURL),
 	)
 	if err != nil {
@@ -492,6 +525,14 @@ func Load(noConfigDump bool) {
 		newValue := max(200, min(1200, Server.UICoverArtSize))
 		log.Warn("UICoverArtSize must be between 200 and 1200, clamping", "value", Server.UICoverArtSize, "newValue", newValue)
 		Server.UICoverArtSize = newValue
+	}
+
+	// Floor MaxImageSize at MaxImageUploadSize so accepted uploads can always be read back.
+	imgSize, _ := humanize.ParseBytes(Server.MaxImageSize)
+	uploadSize, _ := humanize.ParseBytes(Server.MaxImageUploadSize)
+	if imgSize < uploadSize {
+		log.Warn("MaxImageSize must be at least MaxImageUploadSize, raising", "value", Server.MaxImageSize, "newValue", Server.MaxImageUploadSize)
+		Server.MaxImageSize = Server.MaxImageUploadSize
 	}
 
 	// Call init hooks
@@ -819,11 +860,20 @@ func validatePurgeMissingOption() error {
 	return nil
 }
 
-func validateMaxImageUploadSize() error {
-	if _, err := humanize.ParseBytes(Server.MaxImageUploadSize); err != nil {
-		return fmt.Errorf("invalid MaxImageUploadSize %q: use values like '10MB', '1GB', or raw bytes like '10485760': %w", Server.MaxImageUploadSize, err)
+func validateByteSize(name, value string) func() error {
+	return func() error {
+		size, err := humanize.ParseBytes(value)
+		if err != nil {
+			return fmt.Errorf("invalid %s %q: use values like '10MB', '1GB', or raw bytes like '10485760': %w", name, value, err)
+		}
+		if size == 0 {
+			return fmt.Errorf("invalid %s %q: must be greater than zero", name, value)
+		}
+		if size > math.MaxInt64 {
+			return fmt.Errorf("invalid %s %q: value is too large", name, value)
+		}
+		return nil
 	}
-	return nil
 }
 
 func validateEnforceNonRootUser() error {
@@ -963,7 +1013,7 @@ func setViperDefaults() {
 	viper.SetDefault("autoimportplaylists", true)
 	viper.SetDefault("defaultplaylistpublicvisibility", false)
 	viper.SetDefault("playlistspath", "")
-	viper.SetDefault("smartPlaylistRefreshDelay", 5*time.Second)
+	viper.SetDefault("smartPlaylistRefreshDelay", consts.DefaultSmartRefresh)
 	viper.SetDefault("enabledownloads", true)
 	viper.SetDefault("enableexternalservices", true)
 	viper.SetDefault("enablem3uexternalalbumart", false)
@@ -976,6 +1026,7 @@ func setViperDefaults() {
 	viper.SetDefault("matcher.fuzzythreshold", 85)
 	viper.SetDefault("recentlyaddedbymodtime", false)
 	viper.SetDefault("prefersorttags", false)
+	viper.SetDefault("enablenaturalsorting", false)
 	viper.SetDefault("ignoredarticles", "The El La Los Las Le Les Os As O A")
 	viper.SetDefault("indexgroups", "A B C D E F G H I J K L M N O P Q R S T U V W X-Z(XYZ) [Unknown]([)")
 	viper.SetDefault("ffmpegpath", "")
@@ -1003,16 +1054,17 @@ func setViperDefaults() {
 	viper.SetDefault("uiplaybackreportinterval", consts.DefaultUIPlaybackReportInterval)
 	viper.SetDefault("enableartworkupload", true)
 	viper.SetDefault("maximageuploadsize", consts.DefaultMaxImageUploadSize)
+	viper.SetDefault("maximagesize", consts.DefaultMaxImageSize)
 	viper.SetDefault("enablesharing", true)
 	viper.SetDefault("shareurl", "")
-	viper.SetDefault("defaultshareexpiration", 8760*time.Hour)
+	viper.SetDefault("defaultshareexpiration", consts.DefaultShareExpiration)
 	viper.SetDefault("defaultdownloadableshare", false)
 	viper.SetDefault("gatrackingid", "")
 	viper.SetDefault("enableinsightscollector", true)
 	viper.SetDefault("enablescheduleddbanalyze", true)
 	viper.SetDefault("enablelogredacting", true)
 	viper.SetDefault("authrequestlimit", 5)
-	viper.SetDefault("authwindowlength", 20*time.Second)
+	viper.SetDefault("authwindowlength", consts.DefaultAuthWindowLength)
 	viper.SetDefault("passwordencryptionkey", "")
 	viper.SetDefault("extauth.userheader", "Remote-User")
 	viper.SetDefault("extauth.trustedsources", "")
@@ -1102,6 +1154,12 @@ func setViperDefaults() {
 	viper.SetDefault("devartworkthrottlebackloglimit", consts.RequestThrottleBacklogLimit)
 	viper.SetDefault("devartworkthrottlebacklogtimeout", consts.RequestThrottleBacklogTimeout)
 	viper.SetDefault("devartworkthrottlebuffered", true)
+	// Half the CPU count (min 2), so local resolution scales with the host but stays under the
+	// SQLite pool (MaxOpenConns) — leaving connections for the scanner, scrobbles and the UI.
+	viper.SetDefault("devartworkworkerconcurrency", max(2, runtime.NumCPU()/2))
+	// External RPS gates outbound calls to third-party services (per service); it is bounded by
+	// their tolerance, not the host, so it stays a small constant regardless of CPU count.
+	viper.SetDefault("devartworkexternalmaxrps", 2)
 	viper.SetDefault("devartistinfotimetolive", consts.ArtistInfoTimeToLive)
 	viper.SetDefault("devalbuminfotimetolive", consts.AlbumInfoTimeToLive)
 	viper.SetDefault("devexternalscanner", true)

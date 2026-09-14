@@ -312,12 +312,12 @@ func parseJSONResponse(w *httptest.ResponseRecorder) *responses.Subsonic {
 // noopArtwork implements artwork.Artwork
 type noopArtwork struct{}
 
-func (n noopArtwork) Get(context.Context, model.ArtworkID, int, bool) (io.ReadCloser, time.Time, error) {
-	return nil, time.Time{}, model.ErrNotFound
+func (n noopArtwork) Get(context.Context, model.ArtworkID, int, bool) (*artwork.Image, error) {
+	return nil, model.ErrNotFound
 }
 
-func (n noopArtwork) GetOrPlaceholder(_ context.Context, _ string, _ int, _ bool) (io.ReadCloser, time.Time, error) {
-	return io.NopCloser(io.LimitReader(nil, 0)), time.Time{}, nil
+func (n noopArtwork) GetOrPlaceholder(_ context.Context, _ string, _ int, _ bool) (*artwork.Image, error) {
+	return &artwork.Image{ReadCloser: io.NopCloser(io.LimitReader(nil, 0))}, nil
 }
 
 // noopArchiver implements core.Archiver
@@ -362,12 +362,8 @@ func (n noopProvider) TopSongs(context.Context, string, string, int) (model.Medi
 	return nil, nil
 }
 
-func (n noopProvider) ArtistImage(context.Context, string) (*url.URL, error) {
-	return nil, model.ErrNotFound
-}
-
-func (n noopProvider) AlbumImage(context.Context, string) (*url.URL, error) {
-	return nil, model.ErrNotFound
+func (n noopProvider) RefreshInfo(context.Context, model.Kind, string) error {
+	return nil
 }
 
 // Compile-time interface checks
@@ -421,8 +417,8 @@ func setupTestDB() {
 	// Create the Subsonic Router with real DS, streamer spy, and real Decider
 	streamerSpy = &harness.SpyStreamer{}
 	decider := stream.NewTranscodeDecider(ds, harness.NoopFFmpeg{})
-	s := scanner.New(ctx, ds, artwork.NoopCacheWarmer(), events.NoopBroker(),
-		playlists.NewPlaylists(ds, core.NewImageUploadService()), metrics.NewNoopInstance())
+	s := scanner.New(ctx, ds, events.NoopBroker(),
+		playlists.NewPlaylists(ds, artwork.NewUploader(ds)), metrics.NewNoopInstance())
 	router = subsonic.New(
 		ds,
 		noopArtwork{},
@@ -432,7 +428,7 @@ func setupTestDB() {
 		noopProvider{},
 		s,
 		events.NoopBroker(),
-		playlists.NewPlaylists(ds, core.NewImageUploadService()),
+		playlists.NewPlaylists(ds, artwork.NewUploader(ds)),
 		scrobbler.NewPlayTracker(ds, events.NoopBroker(), nil),
 		core.NewShare(ds),
 		playback.PlaybackServer(nil),

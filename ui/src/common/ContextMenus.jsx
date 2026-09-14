@@ -10,6 +10,7 @@ import { makeStyles } from '@material-ui/core/styles'
 import {
   useDataProvider,
   useNotify,
+  usePermissions,
   useTranslate,
   useRedirect,
 } from 'react-admin'
@@ -30,6 +31,8 @@ import {
 import { LoveButton } from './LoveButton'
 import config from '../config'
 import { formatBytes } from '../utils'
+import { artistDownloadSize } from './artist'
+import { useRefreshMetadata } from './useRefreshMetadata'
 
 const useStyles = makeStyles({
   noWrap: {
@@ -75,10 +78,15 @@ const ContextMenu = ({
   const translate = useTranslate()
   const notify = useNotify()
   const redirect = useRedirect()
+  const { permissions } = usePermissions()
+  const refreshMetadata = useRefreshMetadata()
   const [anchorEl, setAnchorEl] = useState(null)
   const showFolderView = useSelector(
     (state) => state.settings.showFolderView !== false,
   )
+
+  const isArtist = resource === 'artist'
+  const downloadSize = isArtist ? artistDownloadSize(record) : record?.size
 
   const options = {
     play: {
@@ -113,7 +121,7 @@ const ContextMenu = ({
     },
     ...(!hideShare && {
       share: {
-        enabled: config.enableSharing,
+        enabled: config.enableSharing && (!isArtist || downloadSize),
         needData: false,
         label: translate('ra.action.share'),
         action: (record) =>
@@ -121,11 +129,9 @@ const ContextMenu = ({
       },
     }),
     download: {
-      enabled: config.enableDownloads,
+      enabled: config.enableDownloads && downloadSize,
       needData: false,
-      label:
-        translate('ra.action.download') +
-        (record.size ? ` (${formatBytes(record.size)})` : ''),
+      label: `${translate('ra.action.download')} (${formatBytes(downloadSize)})`,
       action: () => {
         let type = DOWNLOAD_MENU_ALBUM
         if (record.duration === undefined) type = DOWNLOAD_MENU_ARTIST
@@ -162,6 +168,12 @@ const ContextMenu = ({
           notify('ra.notification.http_error', 'warning')
         }
       },
+    },
+    refresh: {
+      enabled: permissions === 'admin',
+      needData: false,
+      label: translate('resources.album.actions.refresh'),
+      action: (record) => refreshMetadata(resource, record.id),
     },
     ...(!hideInfo && {
       info: {

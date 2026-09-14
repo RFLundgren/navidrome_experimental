@@ -18,17 +18,18 @@ func CreateMockPlaylistRepo() *MockPlaylistRepo {
 
 type MockPlaylistRepo struct {
 	model.PlaylistRepository
-	Data           map[string]*model.Playlist // keyed by ID
-	PathMap        map[string]*model.Playlist // keyed by path
-	All            model.Playlists
-	Options        model.QueryOptions
-	Last           *model.Playlist
-	Deleted        []string
-	RemovedItemIDs []string
-	Starred        map[string]bool // itemID -> starred
-	Ratings        map[string]int  // itemID -> rating
-	Err            bool
-	TracksRepo     model.PlaylistTrackRepository
+	Data            map[string]*model.Playlist // keyed by ID
+	PathMap         map[string]*model.Playlist // keyed by path
+	All             model.Playlists
+	Options         model.QueryOptions
+	Last            *model.Playlist
+	Deleted         []string
+	RemovedItemIDs  []string
+	Starred         map[string]bool // itemID -> starred
+	Ratings         map[string]int  // itemID -> rating
+	Err             bool
+	TracksRepo      model.PlaylistTrackRepository
+	TracksRefreshed bool
 }
 
 func (m *MockPlaylistRepo) SetError(err bool) {
@@ -155,7 +156,8 @@ func (m *MockPlaylistRepo) ReassignAnnotation(string, string) error {
 	return nil
 }
 
-func (m *MockPlaylistRepo) Tracks(_ string, _ bool) model.PlaylistTrackRepository {
+func (m *MockPlaylistRepo) Tracks(_ string, refreshSmartPlaylist bool) model.PlaylistTrackRepository {
+	m.TracksRefreshed = refreshSmartPlaylist
 	return m.TracksRepo
 }
 
