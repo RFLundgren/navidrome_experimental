@@ -34,7 +34,7 @@ func (r *resolver) resolvePodcastChannel(ctx context.Context, channelID string) 
 	if res, ok, err := resolveExternalStep(r.ext.gate, "external", sf); ok {
 		return res, nil
 	} else if err != nil {
-		return resolution{extErr: err}, nil
+		return resolution{extErr: err}, nil //nolint:nilerr // a fetch failure is a soft "no image, retry later", not a resolution error
 	}
 	return resolution{}, nil
 }
