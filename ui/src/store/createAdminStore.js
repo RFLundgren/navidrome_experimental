@@ -64,6 +64,7 @@ const createAdminStore = ({
           savedPlayIndex,
         }))(state.player),
         albumView: state.albumView,
+        folderView: state.folderView,
         settings: state.settings,
       })
     }),

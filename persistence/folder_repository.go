@@ -79,8 +79,9 @@ func newFolderRepository(ctx context.Context, db dbx.Builder) model.FolderReposi
 	// the query would fall through to "first folder row for this library" instead.
 	r.allowEmptyFilterValue("parent_id")
 	r.setSortMappings(map[string]string{
-		"name": "folder.name",
-		"path": "folder.path",
+		"name":         "folder.name",
+		"path":         "folder.path",
+		"library_name": "library.name",
 	})
 	return r
 }
