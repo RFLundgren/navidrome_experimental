@@ -119,11 +119,19 @@ func (r folderRepository) populateBreadcrumbs(f *model.Folder, libPath, libName 
 		{ID: libIDStr, Name: lib.Name},
 	}
 
-	if f.Path == "" || f.Path == "." {
+	// Folder.Path stores the *parent* path and Folder.Name stores the current
+	// directory name. Breadcrumbs must therefore be built from both. Using only
+	// f.Path makes every breadcrumb trail lag exactly one level behind.
+	if (f.Path == "" || f.Path == ".") && (f.Name == "" || f.Name == ".") {
 		return
 	}
 
-	parts := strings.Split(strings.Trim(f.Path, "/"), "/")
+	fullPath := f.Name
+	if f.Path != "" && f.Path != "." {
+		fullPath = strings.Trim(f.Path, "/") + "/" + f.Name
+	}
+
+	parts := strings.Split(strings.Trim(fullPath, "/"), "/")
 	currentPath := ""
 	for _, part := range parts {
 		if part == "" || part == "." {

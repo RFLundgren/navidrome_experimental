@@ -330,8 +330,13 @@ var _ = Describe("FolderRepository", func() {
 			res, err := repo.(model.ResourceRepository).Read(folder.ID)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.(*model.Folder).Name).To(Equal("Folder"))
-			// Verify breadcrumbs are populated
-			Expect(res.(*model.Folder).Breadcrumbs).ToNot(BeEmpty())
+			// Breadcrumbs include the library, every parent, and the current folder.
+			breadcrumbs := res.(*model.Folder).Breadcrumbs
+			Expect(breadcrumbs).To(HaveLen(3))
+			Expect(breadcrumbs[0].Name).To(Equal(testLib.Name))
+			Expect(breadcrumbs[1].Name).To(Equal("TestRead"))
+			Expect(breadcrumbs[2].Name).To(Equal("Folder"))
+			Expect(breadcrumbs[2].ID).To(Equal(folder.ID))
 		})
 
 		It("should implement ReadAll with filtering", func() {
