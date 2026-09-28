@@ -191,12 +191,15 @@ const FolderArtistInfo = () => {
 }
 
 const SubfoldersSection = (props) => {
-  const { total, loaded, loading, filterValues } = useListContext()
+  const { ids = [], loaded, loading, filterValues = {} } = useListContext()
   const classes = useStyles()
   const translate = useTranslate()
   const folderView = useSelector((state) => state.folderView)
 
-  if (loaded && total === 0 && !filterValues.name) return null
+  // React-admin may not always expose `total` here, but an empty `ids` list is
+  // authoritative. Returning null prevents the iterator from rendering its
+  // generic "No results found" placeholder for folders without subfolders.
+  if (loaded && ids.length === 0 && !filterValues.name) return null
 
   return (
     <>
@@ -260,9 +263,14 @@ const FolderShowLayout = (props) => {
 
   if (loading || !record) return null
 
+  const displayName =
+    (record.path === '' || record.path === '.') && record.breadcrumbs?.length
+      ? record.breadcrumbs[0].name
+      : record.name
+
   return (
     <>
-      <RaTitle title={<Title subTitle={record.name} />} />
+      <RaTitle title={<Title subTitle={displayName} />} />
       <FolderListActions {...props} />
       <SimpleShowLayout record={record}>
         <FolderHeader />
@@ -284,7 +292,7 @@ const FolderShowLayout = (props) => {
           reference="song"
           target="folder_id"
           label=""
-          sort={{ field: 'path', order: 'ASC' }}
+          sort={{ field: 'album', order: 'ASC' }}
           perPage={500}
           pagination={<Pagination rowsPerPageOptions={[100, 250, 500, 1000]} />}
           fullWidth
