@@ -1,20 +1,25 @@
 package subsonic
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/consts"
 	"github.com/navidrome/navidrome/core/publicurl"
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
+	"github.com/navidrome/navidrome/model/request"
 	"github.com/navidrome/navidrome/server/filter"
 	"github.com/navidrome/navidrome/server/subsonic/responses"
+	"github.com/navidrome/navidrome/utils"
 	"github.com/navidrome/navidrome/utils/req"
 	"github.com/navidrome/navidrome/utils/slice"
 )
@@ -99,12 +104,123 @@ func (api *Router) getArtistIndexID3(r *http.Request, libIds []int, ifModifiedSi
 	return res, nil
 }
 
+func folderIndexKey(name string) string {
+	indexGroups := utils.ParseIndexGroups(conf.Server.IndexGroups)
+	name = strings.ToLower(strings.TrimSpace(name))
+	for prefix, group := range indexGroups {
+		if strings.HasPrefix(name, strings.ToLower(prefix)) {
+			return group
+		}
+	}
+	return "#"
+}
+
+func folderAsIndexArtist(f model.Folder) responses.Artist {
+	return responses.Artist{
+		Id:       f.ID,
+		Name:     f.Name,
+		CoverArt: f.CoverArtID().String(),
+	}
+}
+
+func userCanBrowsePhysicalFolders(ctx context.Context) bool {
+	user := getUser(ctx)
+	if user.IsAdmin {
+		return true
+	}
+	enabled, configured := user.FeaturePermissions[model.FeatureFolders]
+	return !configured || enabled
+}
+
+func (api *Router) getFolderIndex(r *http.Request, libIds []int, ifModifiedSince time.Time) (*responses.Indexes, error) {
+	ctx := r.Context()
+
+	lastScanStr, err := api.ds.Property(ctx).DefaultGet(consts.LastScanStartTimeKey, "")
+	if err != nil {
+		log.Error(ctx, "Error retrieving last scan start time", err)
+		return nil, err
+	}
+	lastScan := time.Now()
+	if lastScanStr != "" {
+		lastScan, err = time.Parse(time.RFC3339, lastScanStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	res := &responses.Indexes{
+		IgnoredArticles: conf.Server.IgnoredArticles,
+		LastModified:    lastScan.UnixMilli(),
+	}
+	if !lastScan.After(ifModifiedSince) {
+		return res, nil
+	}
+
+	var folders model.Folders
+	for _, lib := range getUserAccessibleLibraries(ctx) {
+		if !slices.Contains(libIds, lib.ID) {
+			continue
+		}
+
+		rootID := model.FolderID(lib, ".")
+		topLevel, err := api.ds.Folder(ctx).GetAll(filter.ByParentID(rootID))
+		if err != nil {
+			return nil, err
+		}
+		// Keep the explicit checks even though the SQL repository already applies
+		// ByParentID. Besides making the library boundary obvious, this also keeps
+		// alternate/mock repositories from leaking unrelated folders into the index.
+		for _, f := range topLevel {
+			if f.LibraryID == lib.ID && f.ParentID == rootID && !f.Missing {
+				folders = append(folders, f)
+			}
+		}
+	}
+
+	slices.SortFunc(folders, func(a, b model.Folder) int {
+		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+
+	grouped := make(map[string][]responses.Artist)
+	for _, folder := range folders {
+		key := folderIndexKey(folder.Name)
+		entry := folderAsIndexArtist(folder)
+		if artistID, resolveErr := api.artistIDForPhysicalFolder(ctx, folder); resolveErr == nil && artistID != "" {
+			if artist, artistErr := api.ds.Artist(ctx).Get(artistID); artistErr == nil {
+				entry.CoverArt = artist.CoverArtID().String()
+				entry.ArtistImageUrl = publicurl.ImageURL(r, artist.CoverArtID(), 600)
+			}
+		}
+		grouped[key] = append(grouped[key], entry)
+	}
+
+	keys := make([]string, 0, len(grouped))
+	for key := range grouped {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	res.Index = make([]responses.Index, 0, len(keys))
+	for _, key := range keys {
+		res.Index = append(res.Index, responses.Index{Name: key, Artists: grouped[key]})
+	}
+	return res, nil
+}
+
 func (api *Router) GetIndexes(r *http.Request) (*responses.Subsonic, error) {
 	p := req.Params(r)
-	musicFolderIds, _ := selectedMusicFolderIds(r, false)
+	musicFolderIds, err := selectedMusicFolderIds(r, false)
+	if err != nil {
+		return nil, err
+	}
 	ifModifiedSince := p.TimeOr("ifModifiedSince", time.Time{})
 
-	res, err := api.getArtistIndex(r, musicFolderIds, ifModifiedSince)
+	var res *responses.Indexes
+	if conf.Server.Subsonic.FolderBrowsing && userCanBrowsePhysicalFolders(r.Context()) {
+		res, err = api.getFolderIndex(r, musicFolderIds, ifModifiedSince)
+	} else {
+		res, err = api.getArtistIndex(r, musicFolderIds, ifModifiedSince)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -205,8 +321,13 @@ func (api *Router) buildFolderDirectory(ctx context.Context, f *model.Folder) (*
 	}
 
 	dir.Child = make([]responses.Child, 0, len(subfolders)+len(mfs))
-	dir.Child = append(dir.Child, slice.MapWithArg(subfolders, ctx, childFromFolder)...)
+	for _, subfolder := range subfolders {
+		child := childFromFolder(ctx, subfolder)
+		api.applyPhysicalArtistMetadata(ctx, subfolder, &child)
+		dir.Child = append(dir.Child, child)
+	}
 	dir.Child = append(dir.Child, slice.MapWithArg(mfs, ctx, childFromMediaFile)...)
+	api.applyPhysicalArtistDirectoryMetadata(ctx, *f, dir)
 
 	return dir, nil
 }
@@ -342,6 +463,133 @@ func (api *Router) GetGenres(r *http.Request) (*responses.Subsonic, error) {
 	return response, nil
 }
 
+// artistIDForPhysicalFolder returns the ID of a real artist when a physical
+// folder looks like an artist folder. The match is deliberately conservative:
+// the folder name must match exactly (case-insensitively) and that artist must
+// actually have at least one track somewhere in the folder subtree. Ambiguous
+// matches are ignored.
+func (api *Router) artistIDForPhysicalFolder(ctx context.Context, folder model.Folder) (string, error) {
+	folderName := strings.TrimSpace(folder.Name)
+	if folderName == "" || folderName == "." {
+		return "", nil
+	}
+
+	// QueryOptions filters are raw SQL predicates at repository level, so use
+	// fully-qualified columns here. artistRepository joins library_artist when
+	// selecting artists, making an unqualified library_id ambiguous.
+	artists, err := api.ds.Artist(ctx).GetAll(model.QueryOptions{
+		Max: 25,
+		Filters: squirrel.And{
+			squirrel.Expr("artist.name = ? COLLATE NOCASE", folderName),
+			squirrel.Eq{"library_artist.library_id": folder.LibraryID},
+			squirrel.Eq{"artist.missing": false},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	var matchedID string
+	for _, artist := range artists {
+		if !strings.EqualFold(strings.TrimSpace(artist.Name), folderName) {
+			continue
+		}
+
+		// media_file_artists is the authoritative relation between tracks and
+		// artists. Use it instead of parsing the participants JSON here. The
+		// recursive CTE follows parent_id, so this also works for artist folders
+		// whose tracks live only in album subdirectories.
+		count, err := api.ds.MediaFile(ctx).CountAll(model.QueryOptions{
+			Filters: squirrel.And{
+				squirrel.Expr(`media_file.folder_id IN (
+					WITH RECURSIVE folder_tree(id) AS (
+						SELECT id FROM folder WHERE id = ? AND library_id = ? AND missing = 0
+						UNION ALL
+						SELECT f.id FROM folder f
+						JOIN folder_tree ft ON f.parent_id = ft.id
+						WHERE f.library_id = ? AND f.missing = 0
+					)
+					SELECT id FROM folder_tree
+				)`, folder.ID, folder.LibraryID, folder.LibraryID),
+				squirrel.Expr(`EXISTS (
+					SELECT 1 FROM media_file_artists mfa
+					WHERE mfa.media_file_id = media_file.id
+					  AND mfa.artist_id = ?
+					  AND mfa.role IN ('artist', 'albumartist')
+				)`, artist.ID),
+				squirrel.Eq{"media_file.library_id": folder.LibraryID},
+				squirrel.Eq{"media_file.missing": false},
+			},
+		})
+		if err != nil {
+			return "", err
+		}
+		if count == 0 {
+			continue
+		}
+
+		if matchedID != "" && matchedID != artist.ID {
+			return "", nil
+		}
+		matchedID = artist.ID
+	}
+
+	return matchedID, nil
+}
+
+// applyPhysicalArtistMetadata enriches a physical folder with normal artist
+// metadata when the folder maps unambiguously to a real Navidrome artist. The
+// folder ID itself is deliberately left untouched so folder navigation keeps
+// using getMusicDirectory, while ArtistId points clients at the real artist for
+// biographies and other metadata.
+func (api *Router) applyPhysicalArtistMetadata(ctx context.Context, folder model.Folder, child *responses.Child) {
+	artistID, err := api.artistIDForPhysicalFolder(ctx, folder)
+	if err != nil || artistID == "" {
+		return
+	}
+	artist, err := api.ds.Artist(ctx).Get(artistID)
+	if err != nil {
+		return
+	}
+
+	child.ArtistId = artist.ID
+	child.CoverArt = artist.CoverArtID().String()
+	child.SongCount = int32(artist.SongCount)
+
+	// DSub decides whether a directory entry is an album with the heuristic
+	//     parent != null || artist != null
+	// and only requests getArtistInfo for directory entries that are *not*
+	// considered albums. Physical folders normally carry Parent, so an artist
+	// folder nested below a category (e.g. Rock/a-ha) is otherwise treated as
+	// an album and DSub never asks for its biography. For an unambiguously
+	// resolved artist folder, omit those two album signals for DSub only. The
+	// getMusicDirectory response for the folder still contains its real Parent,
+	// so navigation/backtracking remains intact.
+	if player, ok := request.PlayerFrom(ctx); ok && strings.Contains(strings.ToLower(player.Client), "dsub") {
+		child.Parent = ""
+		child.Artist = ""
+	} else {
+		child.Artist = artist.Name
+	}
+}
+
+func (api *Router) applyPhysicalArtistDirectoryMetadata(ctx context.Context, folder model.Folder, dir *responses.Directory) {
+	artistID, err := api.artistIDForPhysicalFolder(ctx, folder)
+	if err != nil || artistID == "" {
+		return
+	}
+	artist, err := api.ds.Artist(ctx).Get(artistID)
+	if err != nil {
+		return
+	}
+
+	dir.Artist = artist.Name
+	dir.ArtistId = artist.ID
+	dir.CoverArt = artist.CoverArtID().String()
+	dir.SongCount = int32(artist.SongCount)
+	dir.AlbumCount = int32(artist.AlbumCount)
+}
+
 func (api *Router) getArtistInfo(r *http.Request) (*responses.ArtistInfoBase, *model.Artists, error) {
 	ctx := r.Context()
 	p := req.Params(r)
@@ -351,6 +599,26 @@ func (api *Router) getArtistInfo(r *http.Request) (*responses.ArtistInfoBase, *m
 	}
 	count := p.IntOr("count", 20)
 	includeNotPresent := p.BoolOr("includeNotPresent", false)
+
+	// Folder-based Subsonic clients can treat entries returned by getIndexes
+	// as artists and query getArtistInfo using the same folder ID. If the physical
+	// folder can be mapped unambiguously to a real artist in the same library,
+	// use that artist so clients supporting these metadata can show biographies,
+	// artist images, and related information. Otherwise return an empty successful
+	// response instead of a misleading data-not-found error.
+	if folder, folderErr := api.ds.Folder(ctx).Get(id); folderErr == nil {
+		artistID, resolveErr := api.artistIDForPhysicalFolder(ctx, *folder)
+		if resolveErr != nil {
+			return nil, nil, resolveErr
+		}
+		if artistID == "" {
+			emptySimilar := model.Artists{}
+			return &responses.ArtistInfoBase{}, &emptySimilar, nil
+		}
+		id = artistID
+	} else if !errors.Is(folderErr, model.ErrNotFound) {
+		return nil, nil, folderErr
+	}
 
 	artist, err := api.provider.UpdateArtistInfo(ctx, id, count, includeNotPresent)
 	if err != nil {

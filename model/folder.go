@@ -29,6 +29,12 @@ type Folder struct {
 	UpdatedAt       time.Time    `structs:"updated_at" db:"updated_at" json:"updatedAt"`
 	CreatedAt       time.Time    `structs:"created_at" db:"created_at" json:"createdAt"`
 	Breadcrumbs     []Breadcrumb `structs:"-" json:"breadcrumbs" db:"-"`
+
+	// AssociatedArtist* is populated at read time when a physical folder can be
+	// mapped unambiguously to an artist in the same library. It is derived data
+	// and is never persisted in the folder table.
+	AssociatedArtistID   string `structs:"-" db:"-" json:"artistId,omitempty"`
+	AssociatedArtistName string `structs:"-" db:"-" json:"artistName,omitempty"`
 }
 
 type Breadcrumb struct {
