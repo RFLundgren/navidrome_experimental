@@ -150,6 +150,7 @@ func (r folderRepository) Get(id string) (*model.Folder, error) {
 	err := r.queryOne(sq, &res)
 	if err == nil {
 		r.populateBreadcrumbs(&res.Folder, res.LibraryPath, res.LibraryName)
+		err = r.populateAssociatedArtists([]*model.Folder{&res.Folder})
 	}
 	return &res.Folder, err
 }
@@ -173,6 +174,69 @@ func (r folderRepository) GetAll(opt ...model.QueryOptions) (model.Folders, erro
 		r.populateBreadcrumbs(&res[i].Folder, res[i].LibraryPath, res[i].LibraryName)
 	}
 	return res.toModels(), nil
+}
+
+// populateAssociatedArtists annotates the current physical folder when it maps
+// unambiguously to a real artist in the same library. This deliberately uses
+// the folder parent_id tree instead of reconstructing paths, matching the
+// proven Subsonic physical-folder resolver.
+func (r folderRepository) populateAssociatedArtists(folders []*model.Folder) error {
+	for _, folder := range folders {
+		if folder == nil {
+			continue
+		}
+
+		folder.AssociatedArtistID = ""
+		folder.AssociatedArtistName = ""
+
+		type artistMatch struct {
+			ArtistID   string `db:"artist_id"`
+			ArtistName string `db:"artist_name"`
+		}
+
+		query := Select(
+			"DISTINCT artist.id AS artist_id",
+			"artist.name AS artist_name",
+		).Prefix(`WITH RECURSIVE folder_tree(id) AS (
+			SELECT id
+			FROM folder
+			WHERE id = ? AND library_id = ? AND missing = 0
+			UNION ALL
+			SELECT child.id
+			FROM folder child
+			JOIN folder_tree parent ON child.parent_id = parent.id
+			WHERE child.library_id = ? AND child.missing = 0
+		)`, folder.ID, folder.LibraryID, folder.LibraryID).
+			From("artist").
+			Join("library_artist ON library_artist.artist_id = artist.id").
+			Where(Eq{
+				"library_artist.library_id": folder.LibraryID,
+				"artist.missing":            false,
+			}).
+			Where(Expr("artist.name = ? COLLATE NOCASE", folder.Name)).
+			Where(Expr(`EXISTS (
+				SELECT 1
+				FROM media_file mf
+				JOIN media_file_artists mfa ON mfa.media_file_id = mf.id
+				WHERE mf.folder_id IN (SELECT id FROM folder_tree)
+				  AND mf.library_id = ?
+				  AND mf.missing = 0
+				  AND mfa.artist_id = artist.id
+				  AND mfa.role IN ('artist', 'albumartist')
+			)`, folder.LibraryID))
+
+		var matches []artistMatch
+		if err := r.queryAll(query, &matches); err != nil {
+			return err
+		}
+		if len(matches) != 1 {
+			continue
+		}
+
+		folder.AssociatedArtistID = matches[0].ArtistID
+		folder.AssociatedArtistName = matches[0].ArtistName
+	}
+	return nil
 }
 
 func (r folderRepository) CountAll(opt ...model.QueryOptions) (int64, error) {

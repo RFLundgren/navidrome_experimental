@@ -190,6 +190,93 @@ var _ = Describe("Browsing", func() {
 		})
 	})
 
+	Describe("Physical folder artist mapping", func() {
+		It("should map an artist-named folder to the real artist", func() {
+			lib := model.Library{ID: 1, Name: "Music", Path: "/music"}
+			ctx = request.WithUser(ctx, model.User{ID: "user-id", Libraries: model.Libraries{lib}})
+
+			ds.Artist(ctx).(*tests.MockArtistRepo).SetData(model.Artists{
+				{ID: "artist-tyketto", Name: "Tyketto"},
+			})
+			ds.MediaFile(ctx).(*tests.MockMediaFileRepo).CountAllValue = 12
+
+			folder := model.NewFolder(lib, "Rock/Tyketto")
+			artistID, err := api.artistIDForPhysicalFolder(ctx, *folder)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(artistID).To(Equal("artist-tyketto"))
+		})
+
+		It("should not map a category folder just because artists exist", func() {
+			lib := model.Library{ID: 1, Name: "Music", Path: "/music"}
+			ctx = request.WithUser(ctx, model.User{ID: "user-id", Libraries: model.Libraries{lib}})
+
+			ds.Artist(ctx).(*tests.MockArtistRepo).SetData(model.Artists{
+				{ID: "artist-moby", Name: "Moby"},
+			})
+			ds.MediaFile(ctx).(*tests.MockMediaFileRepo).CountAllValue = 10
+
+			folder := model.NewFolder(lib, "Game")
+			artistID, err := api.artistIDForPhysicalFolder(ctx, *folder)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(artistID).To(BeEmpty())
+		})
+
+		It("should require the matching artist to have content in the folder subtree", func() {
+			lib := model.Library{ID: 1, Name: "Music", Path: "/music"}
+			ctx = request.WithUser(ctx, model.User{ID: "user-id", Libraries: model.Libraries{lib}})
+
+			ds.Artist(ctx).(*tests.MockArtistRepo).SetData(model.Artists{
+				{ID: "artist-game", Name: "Game"},
+			})
+			ds.MediaFile(ctx).(*tests.MockMediaFileRepo).CountAllValue = 0
+
+			folder := model.NewFolder(lib, "Game")
+			artistID, err := api.artistIDForPhysicalFolder(ctx, *folder)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(artistID).To(BeEmpty())
+		})
+
+		It("should expose a resolved artist folder as an artist to DSub", func() {
+			lib := model.Library{ID: 1, Name: "Music", Path: "/music"}
+			ctx = request.WithUser(ctx, model.User{ID: "user-id", Libraries: model.Libraries{lib}})
+			ctx = request.WithPlayer(ctx, model.Player{Client: "DSub"})
+
+			ds.Artist(ctx).(*tests.MockArtistRepo).SetData(model.Artists{
+				{ID: "artist-aha", Name: "a-ha", SongCount: 42},
+			})
+			ds.MediaFile(ctx).(*tests.MockMediaFileRepo).CountAllValue = 42
+
+			folder := model.NewFolder(lib, "Pop/A-Ha")
+			child := childFromFolder(ctx, *folder)
+			api.applyPhysicalArtistMetadata(ctx, *folder, &child)
+
+			Expect(child.ArtistId).To(Equal("artist-aha"))
+			Expect(child.SongCount).To(Equal(int32(42)))
+			Expect(child.Parent).To(BeEmpty())
+			Expect(child.Artist).To(BeEmpty())
+		})
+
+		It("should reject ambiguous same-name artist matches", func() {
+			lib := model.Library{ID: 1, Name: "Music", Path: "/music"}
+			ctx = request.WithUser(ctx, model.User{ID: "user-id", Libraries: model.Libraries{lib}})
+
+			ds.Artist(ctx).(*tests.MockArtistRepo).SetData(model.Artists{
+				{ID: "artist-one", Name: "Same Name"},
+				{ID: "artist-two", Name: "Same Name"},
+			})
+			ds.MediaFile(ctx).(*tests.MockMediaFileRepo).CountAllValue = 1
+
+			folder := model.NewFolder(lib, "Rock/Same Name")
+			artistID, err := api.artistIDForPhysicalFolder(ctx, *folder)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(artistID).To(BeEmpty())
+		})
+	})
+
 	Describe("GetArtists", func() {
 		It("should validate user access to the specified musicFolderId", func() {
 			// Create mock user with access to library 1 only
