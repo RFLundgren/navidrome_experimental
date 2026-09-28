@@ -123,6 +123,15 @@ func folderAsIndexArtist(f model.Folder) responses.Artist {
 	}
 }
 
+func userCanBrowsePhysicalFolders(ctx context.Context) bool {
+	user := getUser(ctx)
+	if user.IsAdmin {
+		return true
+	}
+	enabled, configured := user.FeaturePermissions[model.FeatureFolders]
+	return !configured || enabled
+}
+
 func (api *Router) getFolderIndex(r *http.Request, libIds []int, ifModifiedSince time.Time) (*responses.Indexes, error) {
 	ctx := r.Context()
 
@@ -207,7 +216,7 @@ func (api *Router) GetIndexes(r *http.Request) (*responses.Subsonic, error) {
 	ifModifiedSince := p.TimeOr("ifModifiedSince", time.Time{})
 
 	var res *responses.Indexes
-	if conf.Server.Subsonic.FolderBrowsing {
+	if conf.Server.Subsonic.FolderBrowsing && userCanBrowsePhysicalFolders(r.Context()) {
 		res, err = api.getFolderIndex(r, musicFolderIds, ifModifiedSince)
 	} else {
 		res, err = api.getArtistIndex(r, musicFolderIds, ifModifiedSince)
