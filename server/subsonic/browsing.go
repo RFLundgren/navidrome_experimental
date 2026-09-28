@@ -1,11 +1,13 @@
 package subsonic
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/navidrome/navidrome/conf"
@@ -15,6 +17,7 @@ import (
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/server/filter"
 	"github.com/navidrome/navidrome/server/subsonic/responses"
+	"github.com/navidrome/navidrome/utils"
 	"github.com/navidrome/navidrome/utils/req"
 	"github.com/navidrome/navidrome/utils/slice"
 )
@@ -99,12 +102,108 @@ func (api *Router) getArtistIndexID3(r *http.Request, libIds []int, ifModifiedSi
 	return res, nil
 }
 
+func folderIndexKey(name string) string {
+	indexGroups := utils.ParseIndexGroups(conf.Server.IndexGroups)
+	name = strings.ToLower(strings.TrimSpace(name))
+	for prefix, group := range indexGroups {
+		if strings.HasPrefix(name, strings.ToLower(prefix)) {
+			return group
+		}
+	}
+	return "#"
+}
+
+func folderAsIndexArtist(f model.Folder) responses.Artist {
+	return responses.Artist{
+		Id:       f.ID,
+		Name:     f.Name,
+		CoverArt: f.CoverArtID().String(),
+	}
+}
+
+func (api *Router) getFolderIndex(r *http.Request, libIds []int, ifModifiedSince time.Time) (*responses.Indexes, error) {
+	ctx := r.Context()
+
+	lastScanStr, err := api.ds.Property(ctx).DefaultGet(consts.LastScanStartTimeKey, "")
+	if err != nil {
+		log.Error(ctx, "Error retrieving last scan start time", err)
+		return nil, err
+	}
+	lastScan := time.Now()
+	if lastScanStr != "" {
+		lastScan, err = time.Parse(time.RFC3339, lastScanStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	res := &responses.Indexes{
+		IgnoredArticles: conf.Server.IgnoredArticles,
+		LastModified:    lastScan.UnixMilli(),
+	}
+	if !lastScan.After(ifModifiedSince) {
+		return res, nil
+	}
+
+	var folders model.Folders
+	for _, lib := range getUserAccessibleLibraries(ctx) {
+		if !slices.Contains(libIds, lib.ID) {
+			continue
+		}
+
+		rootID := model.FolderID(lib, ".")
+		topLevel, err := api.ds.Folder(ctx).GetAll(filter.ByParentID(rootID))
+		if err != nil {
+			return nil, err
+		}
+		// Keep the explicit checks even though the SQL repository already applies
+		// ByParentID. Besides making the library boundary obvious, this also keeps
+		// alternate/mock repositories from leaking unrelated folders into the index.
+		for _, f := range topLevel {
+			if f.LibraryID == lib.ID && f.ParentID == rootID && !f.Missing {
+				folders = append(folders, f)
+			}
+		}
+	}
+
+	slices.SortFunc(folders, func(a, b model.Folder) int {
+		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+
+	grouped := make(map[string][]responses.Artist)
+	for _, folder := range folders {
+		key := folderIndexKey(folder.Name)
+		entry := folderAsIndexArtist(folder)
+		grouped[key] = append(grouped[key], entry)
+	}
+
+	keys := make([]string, 0, len(grouped))
+	for key := range grouped {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	res.Index = make([]responses.Index, 0, len(keys))
+	for _, key := range keys {
+		res.Index = append(res.Index, responses.Index{Name: key, Artists: grouped[key]})
+	}
+	return res, nil
+}
+
 func (api *Router) GetIndexes(r *http.Request) (*responses.Subsonic, error) {
 	p := req.Params(r)
-	musicFolderIds, _ := selectedMusicFolderIds(r, false)
+	musicFolderIds, err := selectedMusicFolderIds(r, false)
+	if err != nil {
+		return nil, err
+	}
 	ifModifiedSince := p.TimeOr("ifModifiedSince", time.Time{})
 
-	res, err := api.getArtistIndex(r, musicFolderIds, ifModifiedSince)
+	var res *responses.Indexes
+	if conf.Server.Subsonic.FolderBrowsing {
+		res, err = api.getFolderIndex(r, musicFolderIds, ifModifiedSince)
+	} else {
+		res, err = api.getArtistIndex(r, musicFolderIds, ifModifiedSince)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -351,6 +450,15 @@ func (api *Router) getArtistInfo(r *http.Request) (*responses.ArtistInfoBase, *m
 	}
 	count := p.IntOr("count", 20)
 	includeNotPresent := p.BoolOr("includeNotPresent", false)
+
+	// Folder-based clients can query getArtistInfo using a folder ID.
+	// Return an empty successful response instead of a data-not-found error.
+	if _, folderErr := api.ds.Folder(ctx).Get(id); folderErr == nil {
+		emptySimilar := model.Artists{}
+		return &responses.ArtistInfoBase{}, &emptySimilar, nil
+	} else if !errors.Is(folderErr, model.ErrNotFound) {
+		return nil, nil, folderErr
+	}
 
 	artist, err := api.provider.UpdateArtistInfo(ctx, id, count, includeNotPresent)
 	if err != nil {
